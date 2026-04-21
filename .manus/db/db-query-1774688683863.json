@@ -1,0 +1,21 @@
+{
+  "query": "SELECT * FROM drivers LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2dR2a3ZgTthd8h5.root --database eYrxZoKiZBGnAzGzmvdBYP --execute SELECT * FROM drivers LIMIT 5;",
+  "rows": [
+    {
+      "id": "1",
+      "userId": "NULL",
+      "email": "driver@test.com",
+      "name": "Test Driver",
+      "licenseNumber": "DL123456789",
+      "companyId": "comp1",
+      "isApproved": "1",
+      "createdAt": "2026-03-28 09:04:36",
+      "updatedAt": "2026-03-28 09:04:36"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tuserId\temail\tname\tlicenseNumber\tcompanyId\tisApproved\tcreatedAt\tupdatedAt\n1\tNULL\tdriver@test.com\tTest Driver\tDL123456789\tcomp1\t1\t2026-03-28 09:04:36\t2026-03-28 09:04:36\n",
+  "stderr": "",
+  "execution_time_ms": 446
+}
