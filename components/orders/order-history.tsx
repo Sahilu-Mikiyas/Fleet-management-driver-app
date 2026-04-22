@@ -10,6 +10,8 @@ interface TripHistoryItem {
   pickupLocation?: { address?: string; city?: string };
   deliveryLocation?: { address?: string; city?: string };
   pricing?: { proposedBudget?: number; currency?: string };
+  proofUploaded?: boolean;
+  otpVerified?: boolean;
   createdAt: string;
 }
 
@@ -72,15 +74,8 @@ export function OrderHistory({ trips, isLoading }: OrderHistoryProps) {
                 </Text>
               </View>
               <View className="items-end gap-1">
-                <View className="flex-row items-center gap-1">
-                  {trip.status?.toUpperCase() === "DELIVERED" && (
-                    <View className="bg-success/20 px-1.5 py-0.5 rounded flex-row items-center">
-                      <Text className="text-success text-[10px] font-bold">✓ OTP Verified</Text>
-                    </View>
-                  )}
-                  <View className={`${getStatusColor(trip.status)} px-2 py-0.5 rounded-full`}>
-                    <Text className="text-white text-[10px] font-bold">{trip.status}</Text>
-                  </View>
+                <View className={`${getStatusColor(trip.status)} px-2 py-0.5 rounded-full`}>
+                  <Text className="text-white text-[10px] font-bold">{trip.status}</Text>
                 </View>
                 {trip.pricing?.proposedBudget && (
                   <Text className="text-sm font-bold text-success mt-1">
@@ -90,14 +85,28 @@ export function OrderHistory({ trips, isLoading }: OrderHistoryProps) {
               </View>
             </View>
 
+            {/* Verification Badges */}
+            {trip.status?.toUpperCase() === "DELIVERED" && (
+              <View className="flex-row items-center gap-2 mb-2">
+                <View className="bg-success/15 px-2 py-1 rounded-md flex-row items-center gap-1">
+                  <Text className="text-[10px]">🔐</Text>
+                  <Text className="text-success text-[10px] font-bold">OTP Verified</Text>
+                </View>
+                <View className="bg-blue-500/15 px-2 py-1 rounded-md flex-row items-center gap-1">
+                  <Text className="text-[10px]">📸</Text>
+                  <Text className="text-blue-500 text-[10px] font-bold">Proof Uploaded</Text>
+                </View>
+              </View>
+            )}
+
             <View className="gap-1 mt-2 pt-3 border-t border-border">
               {trip.pickupLocation?.address && (
-                <Text className="text-xs text-muted truncate">
+                <Text className="text-xs text-muted" numberOfLines={1}>
                   📍 {trip.pickupLocation.city || trip.pickupLocation.address}
                 </Text>
               )}
               {trip.deliveryLocation?.address && (
-                <Text className="text-xs text-muted truncate">
+                <Text className="text-xs text-muted" numberOfLines={1}>
                   🏁 {trip.deliveryLocation.city || trip.deliveryLocation.address}
                 </Text>
               )}

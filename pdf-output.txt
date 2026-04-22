@@ -1,0 +1,755 @@
+Auth Issues
+Goal (new requirement)
+All transport-provider roles must require admin approval before full access.
+Desired flow:
+1. User signs up as fleet-provider role
+2. They are routed to “Application Waiting” page
+3. Admin sees pending request in dashboard
+4. Admin approves/rejects request
+5. If approved: user gets verification email link
+6. After verification, user gets normal dashboard access
+1) Current behavior (what exists today)
+1.1 Role model already has approval field
+User  type includes  isApproved?: boolean .
+1.2 Signup currently sends everyone to dashboard
+SignupPage  always navigates to  /dashboard  on success.
+1.3 Login also sends everyone to dashboard
+LoginPage  also routes directly to  /dashboard .
+1.4 Route guard approval check is OPERATOR-only
+ProtectedRoute  redirects to  /processing  only for  OPERATOR && !isApproved .
+1.5 Processing page is OPERATOR-only
+ProcessingPage  explicitly redirects non-operators away.
+1.6 Admin dashboard has approve-user mutation, but no visible pending-user
+queue UI
+Mutation exists ( approveUserMutation ) but the visible approval panels focus on companies/contracts.
+1.7 API client already has user approval endpoint
+companyApi.approveUser(userId)  exists.
+2) Define fleet-provider approval policy (first decision)
+Create one shared policy constant:
+APPROVAL_REQUIRED_ROLES = [...]
+Untitled
+1
+
+Recommend including at least:
+VENDOR
+DRIVER
+PRIVATE_TRANSPORTER
+COMPANY_ADMIN
+OPERATOR
+(optional based on business)  BROKER
+Keep  SHIPPER  non-approval for faster customer onboarding.
+This policy should live in one place (e.g.  src/lib/approvalPolicy.ts ) and be reused by:
+signup redirect logic,
+protected route logic,
+admin pending-user filters,
+processing page messaging.
+3) Detailed changes required (component-by-component)
+3.1  src/features/auth/SignupPage.tsx
+What changes
+Replace unconditional  navigate('/dashboard') .
+On signup success:
+if role is in  APPROVAL_REQUIRED_ROLES  and  isApproved !== true  →  navigate('/processing')
+else →  navigate('/dashboard')
+UI changes
+Add contextual toast:
+pending roles: “Application submitted. Awaiting admin approval.”
+direct roles: “Account created successfully.”
+Data behavior
+Use returned user payload from signup response role/approval fields via  AuthContext .
+3.2  src/features/auth/LoginPage.tsx
+What changes
+Stop always forcing dashboard.
+Either:
+keep navigating to dashboard and rely on guard, or (preferred)
+route directly based on user role/approval state for cleaner UX.
+Preferred behavior
+Untitled
+2
+
+approval-required + not approved →  /processing
+otherwise →  /dashboard
+3.3  src/routes/ProtectedRoute.tsx
+What changes
+Replace OPERATOR-only check with policy-based check:
+Current:
+if (userRole === 'OPERATOR' && !user.isApproved) ...
+New:
+if (userRole in APPROVAL_REQUIRED_ROLES && !user.isApproved) -> /processing
+Additional rule
+Allow  /processing  access for pending approval users.
+Prevent pending users from all operational routes until approved.
+3.4  src/features/auth/ProcessingPage.tsx
+What changes
+Remove hard OPERATOR restriction:
+Current OPERATOR restriction:
+New:
+allow all roles in  APPROVAL_REQUIRED_ROLES  with  !isApproved
+UI behavior upgrades
+Show role-specific copy:
+“Your Vendor application is under review”
+“Your Fleet Provider application…”
+Show statuses:
+PENDING  (waiting)
+APPROVED  (continue)
+REJECTED  (contact/support path)
+Polling behavior
+Keep periodic  refreshUser()  polling (already exists).
+Add “Refresh now” button to reduce user anxiety.
+Email verification messaging
+After approval, show:
+“Check your email to verify your account before full access.”
+If backend exposes  emailVerified , gate final button accordingly.
+Untitled
+3
+
+3.5  src/features/dashboard/roles/AdminDashboard.tsx
+What changes
+You need a full Pending User Approvals panel (not just company/contract).
+Build these UI blocks
+1. Pending users card/table
+columns: name, role, email, signup date, status
+2. Filters
+role filter (only approval-required roles)
+search by name/email
+3. Actions
+Approve
+Reject
+(optional) Request more info
+4. Detail drawer/modal
+profile docs/company info snapshot for reviewer confidence
+Existing code you can leverage
+approveUserMutation  already exists.
+Add corresponding reject mutation once endpoint is confirmed.
+Critical behavior
+On approve:
+immediately remove from pending list
+trigger success toast
+invalidate pending-user query
+On reject:
+require rejection reason (optional but recommended)
+3.6  src/services/api/company.ts  (or new  adminApi.ts )
+What changes
+Keep  approveUser .
+Add missing admin moderation endpoints once confirmed:
+get pending users
+reject user
+optionally re-open/review user
+Current only has approve user.
+Recommendation
+Untitled
+4
+
+Move user moderation endpoints to dedicated  adminApi.ts  for cleaner boundaries.
+3.7  src/context/AuthContext.tsx
+What changes
+Ensure auth user object includes fields needed for gate logic:
+role
+isApproved
+(if applicable)  emailVerified
+status
+Behavior
+refreshUser()  should reliably update these fields so  /processing  transitions without logout/login loops.
+3.8  src/App.tsx  route structure
+What changes
+Keep  /processing  public-to-authenticated route as now.
+Ensure pending users cannot enter protected app layout routes by guard logic.
+Keep fallback behavior deterministic.
+Current processing route exists and is already wired.
+4) Email verification part (your new requirement)
+You said: approval sends verification link and user gets access after verification.
+Frontend requirement
+Add explicit handling for verification completion:
+new page:  /verify-email/:token  or backend redirect callback
+page behavior:
+verify token endpoint
+success: route to login/dashboard
+fail: show retry/help
+Access rule update
+For approval-required roles:
+need both:
+isApproved === true
+emailVerified === true  (if backend exposes this)
+If backend currently does not return  emailVerified , request that addition before finalizing flow.
+Untitled
+5
+
+5) UX states required (strict)
+For each pending user role, support these states:
+1. Submitted
+2. Under review
+3. Approved, verify email pending
+4. Verified + activated
+5. Rejected
+Each state needs:
+clear heading
+plain-English next step
+one CTA (or none if blocked)
+optional support contact
+6) Edge case handling you must include
+Approved user still sees pending page due stale cache
+Rejected user tries direct dashboard URL
+Role changed by admin while user session is active
+Token expired in email verification
+User approved but email not delivered
+Pending user logs out/in repeatedly
+7) Done criteria for this approval feature
+You are done when all pass:
+Any approval-required role signup goes to waiting flow.
+Admin can see and action pending users.
+Approval state updates in user UI without manual DB changes.
+Approval + email verification gate both enforce before access.
+Non-approval roles continue normal immediate onboarding.
+Auth Issues II
+(role removal and private transporter split page)
+Untitled
+6
+
+1) Role availability change on Signup
+What exists now
+SignupPage  currently exposes these role options in the same dropdown:
+SHIPPER, VENDOR, DRIVER, COMPANY_ADMIN, PRIVATE_TRANSPORTER, BROKER, OPERATOR, ADMIN,
+SUPER_ADMIN.
+What you want
+Roles to remove from signup:
+BROKER
+OPERATOR
+ADMIN
+DRIVER
+SUPER_ADMIN
+Roles that remain selectable:
+SHIPPER
+VENDOR
+COMPANY_ADMIN
+PRIVATE_TRANSPORTER
+Exact change to make
+Update the  roles  array in  SignupPage.tsx  to only show the 4 allowed roles.
+Do not remove roles from backend/global type yet unless business decision says those roles should never exist.
+Keep DRIVER role in system, because company admins can still add drivers via Drivers module.
+2) Private Transporter split-flow (new page)
+What exists now
+Private transporter extra fields are currently inline in the same signup form ( isPrivate  section).
+You specifically want this removed from Signup page and moved to a dedicated second page.
+New desired flow
+For  PRIVATE_TRANSPORTER :
+1. Complete basic signup (normal person fields)
+2. Redirect to dedicated details page (driver-like + vehicle details)
+3. Submit full personal+license+vehicle details
+4. Redirect to waiting page ( /processing ) pending admin approval
+3) Component-by-component implementation spec
+Untitled
+7
+
+3.1  src/features/auth/SignupPage.tsx
+Remove inline private transporter block
+Delete the conditional block currently shown under  isPrivate .
+Keep basic signup fields only
+Full name / phone / email / password / role / optional photo.
+Change submit routing behavior
+If selected role is  PRIVATE_TRANSPORTER :
+signup basic account first
+redirect to  /signup/private-transporter-details
+Else:
+follow existing non-private flow (dashboard or processing depending on approval policy)
+Important
+Right now signup always routes to dashboard. That must be replaced with role/state-aware routing.
+3.2 Add new
+page:  src/features/auth/PrivateTransporterDetailsPage.tsx  (new)
+This should be a dedicated full-page form (similar depth to Add Driver modal, but expanded).
+Use  DriversPage  “Add Driver” form as UX baseline:
+Full name/phone/email style
+license number
+driver photo
+license photo
+Reference UX structure:
+Required sections in new page
+A) Personal & license
+Full legal name (prefilled from auth user if available)
+phone/email (prefilled, editable if allowed)
+license number
+license issue/expiry
+national ID (if required by backend)
+B) Vehicle details
+plate number
+vehicle type
+model
+capacity kg
+Untitled
+8
+
+year
+ownership docs
+insurance expiry
+optional vehicle photos
+C) Uploads
+driver photo
+license image
+vehicle registration doc
+insurance doc
+D) Declaration
+consent checkbox
+submit button
+Submission behavior
+POST/PATCH to private transporter profile onboarding endpoint (backend contract needed)
+on success:
+toast: application submitted
+navigate  /processing
+Failure behavior
+inline field errors + top summary
+preserve entered values
+retry safe
+3.3 Route wiring in  src/App.tsx
+What exists
+/signup  and  /processing  already exist routes.
+Add
+New route:  /signup/private-transporter-details
+Guard behavior:
+only authenticated users with role  PRIVATE_TRANSPORTER
+only if onboarding details not yet completed
+if wrong role/user hits URL directly → redirect appropriately
+3.4 Auth and onboarding state handling ( AuthContext  + guard logic)
+Use auth user object/state to know if private transporter details are completed.
+Need one onboarding flag from backend
+Untitled
+9
+
+Examples:
+privateTransporterProfileCompleted
+or
+onboardingStep = BASIC_SIGNUP | DETAILS_SUBMITTED | APPROVED | ...
+Behavior required
+private transporter after basic signup:
+if details not complete → force to details page
+after details submitted:
+force to  /processing  until approved
+after approval:
+allow dashboard access
+3.5 Processing page alignment
+Your waiting page should now include private transporters (and other approval-required roles), not just operator.
+Current page still assumes OPERATOR-only.
+Update to:
+support all approval-required roles
+show role-specific messaging
+keep polling status behavior
+3.6 Admin dashboard: pending private transporter requests
+Current admin panel has company/contract approvals and an approve-user mutation but no visible pending-user list UI.
+Add dedicated queue section:
+“Pending Fleet Provider Applications”
+include  PRIVATE_TRANSPORTER  profile summary:
+personal info
+license info
+vehicle info
+document links/previews
+actions: approve / reject
+4) Validation rules specific to private transporter page
+Use strict validation (zod/react-hook-form):
+license number required
+vehicle plate required
+capacity positive
+expiry date in future
+required docs uploaded before submit
+Untitled
+10
+
+prevent submit if any required file missing
+5) Data/API requirements you need from backend (must confirm)
+For the new page to work cleanly, backend should provide:
+1. endpoint to submit private transporter details
+2. endpoint to fetch current onboarding status
+3. include onboarding flags in  check-auth  response
+4. user approval endpoints for admin (approve/reject)
+5. email verification linkage after approval (as you defined)
+6) UX details to enforce
+Signup stays short and clean (no giant private transporter block)
+New details page is focused and progress-oriented
+Clear top banner:
+“Step 2 of 2: Transporter Verification Details”
+On submit success:
+direct to waiting page with confidence copy
+if user leaves and returns:
+persist draft (local state or server-side partial save)
+7) Regression checks after this change
+Removed roles no longer appear in signup dropdown.
+Driver creation still works through company admin flow.
+Private transporter cannot skip details page.
+Private transporter cannot access operational dashboard until:
+details submitted
+admin approved
+email verified (if enabled)
+Untitled
+11
+
+Happy Path
+Below is a component-by-component, UI-by-UI, highly structured implementation spec for your happy path.
+I’ll do this in the format you asked:
+What exists now
+What changes
+What must be built
+Exact UI behavior
+Exact data/API behavior
+Validation + edge cases
+Definition of complete for that component
+Scope: End-to-end happy path target
+Vendor initiates contract → company accepts → vendor creates direct-company order → dispatcher assigns vehicle +
+driver → driver runs trip statuses → OTP verification gates completion → trip/stats/history reflect final completion.
+Backend references to use while implementing
+Use these as hard references while wiring frontend:
+Contract:
+https://raw.githubusercontent.com/Mubarek26/fleet_management/mubarek/src/routes/contract.routes.js
+https://raw.githubusercontent.com/Mubarek26/fleet_management/mubarek/src/docs/contract.swagger.js
+Orders:
+https://raw.githubusercontent.com/Mubarek26/fleet_management/mubarek/src/routes/order.routes.js
+https://raw.githubusercontent.com/Mubarek26/fleet_management/mubarek/src/docs/order.swagger.js
+Broker assignment:
+https://raw.githubusercontent.com/Mubarek26/fleet_management/mubarek/src/routes/broker.routes.js
+https://raw.githubusercontent.com/Mubarek26/fleet_management/mubarek/src/docs/broker.swagger.js
+Driver + OTP/proof:
+https://raw.githubusercontent.com/Mubarek26/fleet_management/mubarek/src/routes/driver.routes.js
+https://raw.githubusercontent.com/Mubarek26/fleet_management/mubarek/src/docs/driver.swagger.js
+https://raw.githubusercontent.com/Mubarek26/fleet_management/mubarek/src/controllers/tripProof.controller.js
+1) Route + Navigation Access (dispatcher path)
+1.1  src/App.tsx  (route guard)
+What exists now
+/broker  is restricted to  BROKER ,  OPERATOR ,  SUPER_ADMIN ,  ADMIN  only.
+COMPANY_ADMIN  cannot access the dispatcher assignment screen.
+Untitled
+12
+
+What changes
+Add  COMPANY_ADMIN  to allowed roles for  /broker  route.
+What must be built
+Route-level permission update only (small change).
+Confirm this doesn’t expose non-company broker actions inappropriately (UI guard and backend auth still enforce).
+UI behavior
+Company admin should see broker page and interact with assignment tools.
+API behavior
+No API change; this unlocks existing calls in Broker UI.
+Edge cases
+If backend rejects certain actions for  COMPANY_ADMIN , show clear toast and disable unavailable buttons conditionally.
+Complete when
+Company admin login can navigate directly to  /broker  without redirect.
+1.2  src/components/layout/AppSidebar.tsx  (menu discoverability)
+What exists now
+COMPANY_ADMIN  nav has no broker/dispatch entry.
+What changes
+Add Dispatch or Broker Ops item to  COMPANY_ADMIN.secondary .
+What must be built
+Add one nav item mapping to  /broker .
+Keep icon/style consistent with existing navConfig design.
+UI behavior
+Company admin sees dispatcher entry in sidebar.
+Active styling follows existing nav rules.
+Complete when
+Role  COMPANY_ADMIN  sees nav item and can click through.
+2) Contract Flow (vendor initiate, company accept)
+2.1  src/services/api/contractApi.ts
+What exists now
+Generic payload:  vendorId ,  companyId ,  terms ,  notes .
+What changes
+Untitled
+13
+
+Align payload with backend swagger exact names (e.g., transporter company ID, message, dates, etc. depending on
+backend contract).
+What must be built
+Update  ContractInitiatePayload  interface.
+Keep backward compatibility only if backend supports both (otherwise strict).
+API behavior
+initiateContract()  sends exact backend-required field names and types.
+Avoid silent field drops.
+Complete when
+Initiate call succeeds against backend docs payload with no manual payload edits.
+2.2  src/features/contracts/ContractsPage.tsx  (initiation form)
+What exists now
+“Initiate Contract” modal includes vendor/company IDs + terms + notes.
+Approve/terminate actions already in list.
+What changes
+Replace form fields to match backend reality:
+target transporter/company selector
+start/end date if required
+structured message/terms fields as required
+Keep approve flow intact, but ensure status matching from backend values.
+What must be built
+Field-level validation (required IDs, valid dates).
+Better field UX:
+searchable company selector instead of raw ID input.
+Success and error messaging with backend error text.
+UI behavior
+Vendor can initiate from modal with business-readable fields (not raw IDs where avoidable).
+Company admin can see pending contract and approve.
+API behavior
+On success invalidate  ['contracts']  and both vendor/company queries (already partially done, keep).
+Edge cases
+Contract already exists between parties
+Initiation with inactive/suspended company
+Approval race (already approved by another actor)
+Untitled
+14
+
+Complete when
+End-to-end contract handshake succeeds fully in UI without manual ID hacks.
+3) Vendor Order Creation (direct-company targeting)
+3.1  src/features/marketplace/MarketplacePage.tsx  — Post Load form
+What exists now
+Post form is rich, but payload hardcodes:
+assignmentMode: 'OPEN_MARKETPLACE'
+no company/transporter target selection.
+Post mode UI currently focuses on generic marketplace posting.
+What changes
+Add assignment mode selector in Post form:
+OPEN_MARKETPLACE
+DIRECT_COMPANY
+DIRECT_PRIVATE_TRANSPORTER
+Add conditional target selector fields for direct modes.
+What must be built (UI by UI)
+1. New Form Control: Assignment Mode
+place above budget or near title.
+defaults:
+vendor can default to  DIRECT_COMPANY  if contract exists.
+2. Conditional Control: Target Company
+visible if  DIRECT_COMPANY .
+populated from company list endpoint.
+3. Conditional Control: Target Transporter
+visible if  DIRECT_PRIVATE_TRANSPORTER .
+4. Contract-aware helper UI
+show warning if selected target has no active contract (optional but strongly recommended).
+What must be built (logic)
+handleCreateOrder  must map payload by mode.
+For direct modes, include appropriate target ID fields expected by backend.
+Keep existing validation for title/date/budget + add target required validation for direct modes.
+API behavior
+Do not always send  OPEN_MARKETPLACE .
+Send backend-compatible direct-assignment payload.
+Untitled
+15
+
+Edge cases
+User selects direct mode but no target selected.
+Target selected but contract inactive/terminated.
+Backend returns validation error after submit.
+Complete when
+Vendor can create direct-company order and it appears in assignment-ready state for dispatcher.
+3.2  src/features/orders/OrdersPage.tsx  (parity)
+What exists now
+This page also hardcodes  assignmentMode: 'OPEN_MARKETPLACE' .
+What changes
+Either:
+replicate the same mode/target controls here, or
+deliberately keep this page “open marketplace only” and update labeling to avoid confusion.
+What must be built
+Product decision first, then code.
+Avoid having two create-order pages with conflicting capability.
+Complete when
+No contradictory order creation behavior across app surfaces.
+4) Dispatcher Assignment UX ( /broker )
+4.1  src/features/broker/BrokerPage.tsx
+What exists now
+Mature assignment panel already exists:
+match candidates
+validate
+assign mode + target ID
+assign vehicle by vehicleId.
+What changes
+Keep core flow, but refine for company dispatcher usage:
+filter to relevant company orders
+cleaner target selection when mode is direct-company
+avoid requiring raw pasted IDs for common cases
+What must be built (UI)
+Untitled
+16
+
+1. Order filter preset
+add toggle “My Company Orders” for company admin.
+2. Target selector
+when assigning as company dispatcher, prefill/lock target company where applicable.
+3. Vehicle selector
+replace raw  vehicleId  input with dropdown from company fleet (from vehicles endpoint).
+What must be built (logic)
+Use company context ( companies[0]?._id  from existing company API patterns) to filter or pre-bind actions.
+Validate mode-target consistency before submit.
+API behavior
+Continue using:
+brokerApi.assignOrder
+brokerApi.assignVehicle
+Edge cases
+Already assigned order
+Vehicle unavailable
+Driver missing/invalid for company
+Complete when
+Dispatcher can assign without pasting opaque IDs manually in normal workflow.
+5) Driver Workflow + OTP-gated completion
+5.1  src/services/api/driver.ts  (service layer already has OTP)
+What exists now
+Service includes:
+completeAssignment(orderId)
+uploadEvidence(tripId, formData)
+verifyOtp(tripId, otp)
+What changes
+Keep existing methods.
+Add helper methods if backend has resend OTP endpoint (if exposed in docs).
+Complete when
+Service fully supports UI’s proof + OTP completion path.
+5.2  src/features/driver/CurrentTripPage.tsx  (trip detail action panel)
+Untitled
+17
+
+What exists now
+Driver can progress to completion from button click directly.
+What changes
+Replace direct final completion with gated flow:
+1. Click Mark delivered
+2. Open Delivery Verification Modal
+3. Step A: Upload proof (optional/required based on backend rule)
+4. Step B: Enter OTP
+5. Verify OTP
+6. Only then finalize completion
+What must be built (components)
+DeliveryVerificationDialog  (new component)
+props:  tripId ,  open ,  onSuccess ,  onClose
+inside dialog:
+proof upload area
+OTP input (use existing OTP input component)
+verify button
+resend button + cooldown (if endpoint exists)
+replace existing completion button handler to open dialog.
+UI behavior
+Completion button text changes:
+before verify: “Verify delivery”
+after verify success: auto-complete and toast success.
+Show inline error under OTP field for invalid/expired code.
+API behavior
+On submit:
+optional  uploadEvidence
+verifyOtp
+then  completeAssignment  (if backend requires explicit complete after OTP)
+invalidate:
+['driver','assignments']
+history query keys
+Edge cases
+OTP expired
+OTP mismatch
+network timeout
+Untitled
+18
+
+user closes modal halfway
+Complete when
+Driver cannot complete delivery from this page unless OTP passes.
+5.3  src/features/dashboard/roles/DriverDashboard.tsx  (dashboard action
+cards)
+What exists now
+Action generator enables complete button on arrived state.
+What changes
+Reuse the same verification modal + flow from CurrentTripPage.
+Do not duplicate OTP logic in two different ways.
+What must be built
+Replace direct complete mutation action with modal trigger action.
+Add shared hook:
+useDeliveryVerificationFlow()  to centralize proof+otp+complete sequence.
+Complete when
+Driver can’t bypass OTP by completing from dashboard while CurrentTrip enforces it.
+5.4 OTP UI primitive integration
+What exists now
+OTP input UI component exists in UI library.
+What changes
+Use this in new verification dialog for structured 4/6 digit input UX.
+Build details
+Auto-focus next cell
+Backspace behavior
+Paste full OTP support
+disabled while verifying
+Complete when
+OTP entry UX feels native and reliable on desktop/mobile.
+6) State visibility surfaces (post-completion consistency)
+6.1  src/features/driver/DriverTripHistoryPage.tsx
+What exists now
+Untitled
+19
+
+Trip history table + sheet details exists.
+What changes
+Add/ensure fields:
+verifiedAt / otpVerified status (if available)
+proof uploaded indicator
+Keep sheet detail panel informative.
+Complete when
+Completed + verified deliveries are clearly distinguishable in history.
+6.2  src/features/tracking/LiveTrackingPage.tsx
+What exists now
+Step timeline includes delivered state.
+What changes
+If backend exposes “DELIVERED_PENDING_OTP” or similar intermediate status, add step in timeline.
+If not, treat delivered only after OTP completion.
+Complete when
+Timeline semantics match backend status machine (no fake delivered before verify).
+6.3  src/features/analytics/AnalyticsPage.tsx  and dashboards
+What exists now
+Completion metrics use  DELIVERED  counts.
+What changes
+Ensure only OTP-verified final states contribute to completion metrics.
+If backend uses final status name not exactly  DELIVERED , update mapping logic.
+Complete when
+KPI completion numbers align with operational truth.
+7) Data model and type safety updates
+7.1  src/types/index.ts
+What exists now
+MarketplaceOrderCreatePayload.assignmentMode  already includes direct modes.
+What changes
+Add optional target fields required by backend for direct assignments.
+Untitled
+20
+
+Add trip verification status fields if backend returns them.
+Complete when
+No  any  gaps in new happy-path payload/response handling.
+8) UX quality standards for each changed component
+For every changed/new component, enforce:
+1. Loading states (buttons/spinners)
+2. Empty states
+3. Error state messaging from backend
+4. Disabled state guardrails
+5. Success toast + query invalidation
+6. No raw backend errors shown directly to users unless sanitized
+7. Keyboard accessibility for modal + OTP
+9) “Already there vs New build” summary by component
+Already there (keep and adapt):
+Contract list/approve UI
+Broker assignment UI
+Driver status lifecycle UI
+Tracking/history/analytics shells
+Must be built now:
+Direct-company order creation controls
+Company admin dispatcher access path
+OTP verification modal flow integrated in both driver surfaces
+Completion/status consistency tightening across read pages
+10) Final verification checklist (strict)
+Company admin can access dispatch UI
+Vendor can create direct-company order via UI controls
+Dispatcher can assign vehicle + driver without manual raw-ID hacks
+Driver sees assignment in dashboard/current trip
+Driver cannot finalize delivery without OTP verification
+Completed verified trip appears in trip history
+Tracking + analytics reflect final verified completion
+All steps survive refresh/re-login (react-query cache invalidation works)
+Untitled
+21
+
+Commands I used for this structured breakdown
+rg -n "otp|OTP|delivered|completeAssignment|assignOrder|approveContract|initiateContract|proposals|assign" src/services 
+src/features | head -n 200
+nl -ba src/App.tsx
+nl -ba src/components/layout/AppSidebar.tsx
+nl -ba src/services/api/contractApi.ts | sed -n '1,260p'
+nl -ba src/services/api/brokerApi.ts | sed -n '1,320p'
+nl -ba src/services/api/driver.ts | sed -n '1,340p'
+nl -ba src/features/contracts/ContractsPage.tsx | sed -n '1,280p'
+nl -ba src/features/marketplace/MarketplacePage.tsx | sed -n '280,620p'
+nl -ba src/features/broker/BrokerPage.tsx | sed -n '1,300p'
+nl -ba src/features/driver/CurrentTripPage.tsx | sed -n '1,260p'
+nl -ba src/features/dashboard/roles/DriverDashboard.tsx | sed -n '1,300p'
+nl -ba src/features/driver/DriverTripHistoryPage.tsx | sed -n '1,260p'
+nl -ba src/features/tracking/LiveTrackingPage.tsx | sed -n '1,260p'
+nl -ba src/features/analytics/AnalyticsPage.tsx | sed -n '1,260p'
+nl -ba src/types/index.ts
+Untitled
+22
+

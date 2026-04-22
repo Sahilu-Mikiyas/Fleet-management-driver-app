@@ -1,6 +1,7 @@
-import React, { useMemo, useState, useCallback, useEffect } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import React, { useMemo, useState, useCallback, useEffect, useRef } from "react";
+import { View, Text, StyleSheet, Pressable, Alert, AppState } from "react-native";
 import BottomSheet, { BottomSheetView } from "@gorhom/bottom-sheet";
+import * as Notifications from "expo-notifications";
 import { useColors } from "@/hooks/use-colors";
 import { SegmentedControl } from "@/components/segmented-control";
 import { driverApi } from "@/lib/api-client";
@@ -11,11 +12,24 @@ import { ActiveTrip } from "./orders/active-trip";
 import { PendingAssignments } from "./orders/pending-assignments";
 import { OrderHistory } from "./orders/order-history";
 
+// Configure notification handler (show even when app is foregrounded)
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
+
 export function OrdersHub() {
   const colors = useColors();
-  const { driver } = useAuth();
+  const { driver, refreshDriver } = useAuth();
   const [activeTab, setActiveTab] = useState("active");
   const [isLoading, setIsLoading] = useState(true);
+  const [isTogglingAvailability, setIsTogglingAvailability] = useState(false);
+  const previousPendingCount = useRef(0);
 
   // Data States
   const [assignments, setAssignments] = useState<any[]>([]);
@@ -50,14 +64,70 @@ export function OrdersHub() {
 
   useEffect(() => {
     fetchData();
-    // Refresh data every 30 seconds to catch new assignments
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, [fetchData]);
 
+  // ── Push Notification on New Assignment ──
+  useEffect(() => {
+    const pendingOrders = assignments.filter((a) => a.status === "ASSIGNED");
+    if (pendingOrders.length > previousPendingCount.current && previousPendingCount.current > 0) {
+      // A new assignment just arrived!
+      Notifications.scheduleNotificationAsync({
+        content: {
+          title: "🚛 New Assignment!",
+          body: `You have ${pendingOrders.length} pending assignment${pendingOrders.length > 1 ? "s" : ""}. Tap to review.`,
+          sound: true,
+        },
+        trigger: null, // fire immediately
+      });
+    }
+    previousPendingCount.current = pendingOrders.length;
+  }, [assignments]);
+
+  // ── Request notification permissions on mount ──
+  useEffect(() => {
+    (async () => {
+      const { status } = await Notifications.getPermissionsAsync();
+      if (status !== "granted") {
+        await Notifications.requestPermissionsAsync();
+      }
+    })();
+  }, []);
+
+  // ── Refresh when app comes back to foreground ──
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextAppState) => {
+      if (nextAppState === "active") {
+        fetchData();
+      }
+    });
+    return () => subscription.remove();
+  }, [fetchData]);
+
+  // ── Driver Availability Toggle ──
+  const handleToggleAvailability = async () => {
+    if (isTogglingAvailability || !driver) return;
+    setIsTogglingAvailability(true);
+    try {
+      const newAvailability = !driver.isAvailable;
+      await driverApi.updateStatus(
+        newAvailability ? "ACTIVE" : "INACTIVE",
+        newAvailability
+      );
+      await refreshDriver();
+    } catch (error: any) {
+      Alert.alert("Failed", error.message || "Could not update availability.");
+    } finally {
+      setIsTogglingAvailability(false);
+    }
+  };
+
   // Derived state
   const pendingOrders = assignments.filter((a) => a.status === "ASSIGNED");
-  const activeOrder = assignments.find((a) => a.status === "IN_TRANSIT") || null;
+  const activeOrder = assignments.find((a) =>
+    ["IN_TRANSIT", "STARTED", "ARRIVED", "ASSIGNED"].includes(a.status?.toUpperCase())
+  ) || null;
 
   const tabs = [
     { key: "active", label: `Active` },
@@ -67,22 +137,33 @@ export function OrdersHub() {
 
   return (
     <BottomSheet
-      index={1} // Start at 50%
+      index={1}
       snapPoints={snapPoints}
       backgroundStyle={{ backgroundColor: colors.background }}
       handleIndicatorStyle={{ backgroundColor: colors.muted }}
     >
       <BottomSheetView style={styles.contentContainer}>
-        {/* Header / Tabs */}
+        {/* Header */}
         <View className="px-4 pb-4 border-b border-border">
           <View className="flex-row items-center justify-between mb-4">
             <Text className="text-xl font-bold text-foreground">Orders Hub</Text>
-            <View className="flex-row items-center gap-2">
-              <View className={`w-2 h-2 rounded-full ${driver?.isAvailable ? "bg-success" : "bg-warning"}`} />
-              <Text className="text-xs text-muted font-semibold">
-                {driver?.isAvailable ? "ONLINE" : "OFFLINE"}
+
+            {/* ── Availability Toggle ── */}
+            <Pressable
+              onPress={handleToggleAvailability}
+              disabled={isTogglingAvailability}
+              className={`flex-row items-center gap-2 px-3 py-1.5 rounded-full border ${
+                driver?.isAvailable
+                  ? "bg-success/10 border-success/30"
+                  : "bg-error/10 border-error/30"
+              }`}
+              style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+            >
+              <View className={`w-2.5 h-2.5 rounded-full ${driver?.isAvailable ? "bg-success" : "bg-error"}`} />
+              <Text className={`text-xs font-bold ${driver?.isAvailable ? "text-success" : "text-error"}`}>
+                {isTogglingAvailability ? "..." : driver?.isAvailable ? "ONLINE" : "OFFLINE"}
               </Text>
-            </View>
+            </Pressable>
           </View>
           <SegmentedControl
             segments={tabs}
