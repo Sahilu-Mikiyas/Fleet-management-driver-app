@@ -8,7 +8,7 @@ import { mockCargoListings } from "@/lib/mock-cargo";
 const { width } = Dimensions.get("window");
 const cardWidth = (width - 32) / 2;
 
-export default function FavoritesScreen() {
+export function FavoritesContent() {
   const router = useRouter();
   const { favorites, removeFavorite } = useFavorites();
 
@@ -116,7 +116,6 @@ export default function FavoritesScreen() {
   );
 
   return (
-    <ScreenContainer className="p-0">
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View className="bg-primary px-6 py-6">
@@ -155,6 +154,13 @@ export default function FavoritesScreen() {
           )}
         </View>
       </ScrollView>
+  );
+}
+
+export default function FavoritesScreen() {
+  return (
+    <ScreenContainer className="p-0">
+      <FavoritesContent />
     </ScreenContainer>
   );
 }

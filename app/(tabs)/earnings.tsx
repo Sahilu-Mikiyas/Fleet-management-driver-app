@@ -1,208 +1,170 @@
-import React, { useState } from "react";
-import { ScrollView, Text, View, Pressable, Alert } from "react-native";
+import React, { useState, useEffect, useCallback } from "react";
+import { ScrollView, Text, View, Pressable, Alert, ActivityIndicator } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
-import { MockChapaService } from "@/lib/chapa-service";
+import { driverApi, paymentsApi } from "@/lib/api-client";
+import { useColors } from "@/hooks/use-colors";
 
-interface Transaction {
-  id: string;
+interface CommissionEntry {
+  _id: string;
   amount: number;
-  date: string;
-  status: "completed" | "pending" | "failed";
-  reference: string;
+  tripId?: string;
+  orderId?: string;
+  createdAt: string;
+  status?: string;
 }
 
-const mockTransactions: Transaction[] = [
-  {
-    id: "1",
-    amount: 2500,
-    date: "2026-04-05",
-    status: "completed",
-    reference: "FD-1712282400000-abc123",
-  },
-  {
-    id: "2",
-    amount: 1800,
-    date: "2026-04-04",
-    status: "completed",
-    reference: "FD-1712196000000-def456",
-  },
-  {
-    id: "3",
-    amount: 3200,
-    date: "2026-04-03",
-    status: "pending",
-    reference: "FD-1712109600000-ghi789",
-  },
-];
-
-export default function EarningsScreen() {
-  const [transactions] = useState<Transaction[]>(mockTransactions);
+export function EarningsContent() {
+  const colors = useColors();
+  const [totalCommission, setTotalCommission] = useState(0);
+  const [commissionHistory, setCommissionHistory] = useState<CommissionEntry[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
-  const chapaService = new MockChapaService();
 
-  const totalEarnings = transactions
-    .filter((t) => t.status === "completed")
-    .reduce((sum, t) => sum + t.amount, 0);
+  const fetchEarnings = useCallback(async () => {
+    try {
+      const [commissionRes, historyRes] = await Promise.allSettled([
+        driverApi.getCommission(),
+        driverApi.getCommissionHistory(),
+      ]);
 
-  const pendingAmount = transactions
-    .filter((t) => t.status === "pending")
-    .reduce((sum, t) => sum + t.amount, 0);
+      if (commissionRes.status === "fulfilled") {
+        const data = commissionRes.value.data;
+        setTotalCommission(data.data?.totalCommission ?? data.data?.total ?? 0);
+      }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "completed":
-        return "bg-green-100 text-green-700";
-      case "pending":
-        return "bg-yellow-100 text-yellow-700";
-      case "failed":
-        return "bg-red-100 text-red-700";
-      default:
-        return "bg-gray-100 text-gray-700";
+      if (historyRes.status === "fulfilled") {
+        const data = historyRes.value.data;
+        setCommissionHistory(data.data?.commissions || data.data || []);
+      }
+    } catch (error) {
+      console.error("Error fetching earnings:", error);
+    } finally {
+      setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchEarnings();
+  }, [fetchEarnings]);
 
   const handleRequestPayout = async () => {
-    if (totalEarnings < 100) {
-      Alert.alert("Minimum Amount", "You need at least 100 ETB to request a payout");
+    if (totalCommission <= 0) {
+      Alert.alert("No Balance", "You don't have any earnings to withdraw.");
       return;
     }
 
-    setIsProcessing(true);
-    try {
-      const txRef = chapaService.generateTxRef();
-      const response = await chapaService.initializePayment({
-        amount: totalEarnings,
-        email: "driver@example.com",
-        first_name: "Test",
-        last_name: "Driver",
-        phone_number: "+251912345678",
-        tx_ref: txRef,
-      });
-
-      if (response.status === "success" && response.data?.checkout_url) {
-        Alert.alert("Payment Initialized", "Redirecting to Chapa checkout...", [
-          {
-            text: "OK",
-            onPress: () => {
-              // In a real app, you would open the checkout URL
-              console.log("Checkout URL:", response.data?.checkout_url);
-            },
+    Alert.alert(
+      "Request Payout",
+      `Request a payout of ETB ${totalCommission.toLocaleString()}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Request",
+          onPress: async () => {
+            setIsProcessing(true);
+            try {
+              await paymentsApi.initialize("payout", totalCommission);
+              Alert.alert("Success", "Payout request submitted! You'll receive it shortly via Chapa.");
+              await fetchEarnings(); // refresh
+            } catch (error) {
+              Alert.alert("Error", error instanceof Error ? error.message : "Payout request failed.");
+            } finally {
+              setIsProcessing(false);
+            }
           },
-        ]);
-      } else {
-        Alert.alert("Error", response.message);
-      }
-    } catch (error) {
-      Alert.alert("Error", "Failed to process payout request");
-    } finally {
-      setIsProcessing(false);
-    }
+        },
+      ]
+    );
   };
 
   return (
-    <ScreenContainer className="p-0">
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View className="bg-primary px-6 py-6">
-          <Text className="text-white text-2xl font-bold mb-2">Earnings & Payouts</Text>
+          <Text className="text-white text-2xl font-bold mb-2">Earnings</Text>
           <Text className="text-white text-sm opacity-80">Manage your money</Text>
         </View>
 
-        <View className="px-4 py-6 gap-6">
-          {/* Earnings Summary */}
-          <View className="gap-3">
-            {/* Total Earnings */}
-            <View className="bg-gradient-to-r from-primary to-primary/80 rounded-lg p-6">
-              <Text className="text-white/80 text-sm mb-2">Total Earnings</Text>
-              <Text className="text-white text-4xl font-bold">
-                {totalEarnings.toLocaleString()} ETB
+        <View className="px-6 py-6 gap-6">
+          {/* Balance Card */}
+          <View className="bg-green-50 dark:bg-green-950 rounded-lg p-6 border border-green-200 dark:border-green-800">
+            <Text className="text-sm text-green-600 dark:text-green-300 font-semibold mb-1">
+              Available Balance
+            </Text>
+            {isLoading ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Text className="text-4xl font-bold text-green-700 dark:text-green-100">
+                ETB {totalCommission.toLocaleString()}
               </Text>
-              <Text className="text-white/60 text-xs mt-2">From {transactions.length} trips</Text>
-            </View>
-
-            {/* Pending Amount */}
-            {pendingAmount > 0 && (
-              <View className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <View className="flex-row justify-between items-center">
-                  <View>
-                    <Text className="text-yellow-700 text-sm font-semibold">Pending Payout</Text>
-                    <Text className="text-yellow-900 text-xl font-bold">{pendingAmount} ETB</Text>
-                  </View>
-                  <Text className="text-2xl">⏳</Text>
-                </View>
-              </View>
             )}
           </View>
 
-          {/* Request Payout Button */}
+          {/* Payout Button */}
           <Pressable
             onPress={handleRequestPayout}
-            disabled={isProcessing || totalEarnings < 100}
-            style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.97 : 1 }] }]}
+            disabled={isProcessing || isLoading}
+            style={({ pressed }) => [
+              {
+                transform: [{ scale: pressed && !isProcessing ? 0.97 : 1 }],
+                opacity: isProcessing ? 0.6 : 1,
+              },
+            ]}
           >
-            <View
-              className={`rounded-lg py-4 items-center ${
-                totalEarnings < 100
-                  ? "bg-gray-300"
-                  : isProcessing
-                    ? "bg-primary/50"
-                    : "bg-primary"
-              }`}
-            >
-              <Text className="text-white font-bold text-lg">
-                {isProcessing ? "Processing..." : "Request Payout via Chapa"}
+            <View className="bg-primary rounded-lg py-4 items-center">
+              <Text className="text-base font-semibold text-white">
+                {isProcessing ? "Processing..." : "💳 Request Payout via Chapa"}
               </Text>
             </View>
           </Pressable>
 
-          {totalEarnings < 100 && (
-            <View className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <Text className="text-blue-700 text-xs">
-                💡 Minimum 100 ETB required to request payout. Current: {totalEarnings} ETB
-              </Text>
-            </View>
-          )}
-
-          {/* Transaction History */}
-          <View className="gap-3">
-            <Text className="text-lg font-bold text-foreground">Transaction History</Text>
-
-            {transactions.length === 0 ? (
-              <View className="bg-surface rounded-lg p-6 items-center">
-                <Text className="text-muted text-sm">No transactions yet</Text>
+          {/* Commission History */}
+          <View>
+            <Text className="text-lg font-semibold text-foreground mb-3">
+              Commission History
+            </Text>
+            {isLoading ? (
+              <View className="py-8 items-center">
+                <ActivityIndicator size="large" color={colors.primary} />
+              </View>
+            ) : commissionHistory.length === 0 ? (
+              <View className="bg-surface rounded-lg p-6 border border-border items-center">
+                <Text className="text-3xl mb-2">📊</Text>
+                <Text className="text-muted text-center">No commission history yet. Complete trips to earn!</Text>
               </View>
             ) : (
-              transactions.map((transaction) => (
-                <View key={transaction.id} className="bg-surface rounded-lg p-4 border border-border">
-                  <View className="flex-row justify-between items-start mb-2">
+              commissionHistory.map((entry) => (
+                <View
+                  key={entry._id}
+                  className="bg-surface rounded-lg p-4 border border-border mb-3"
+                >
+                  <View className="flex-row justify-between items-center">
                     <View className="flex-1">
-                      <Text className="text-foreground font-semibold">
-                        {transaction.amount.toLocaleString()} ETB
+                      <Text className="text-sm font-semibold text-foreground">
+                        Trip Commission
                       </Text>
-                      <Text className="text-muted text-xs mt-1">{transaction.date}</Text>
+                      <Text className="text-xs text-muted mt-1">
+                        {new Date(entry.createdAt).toLocaleDateString()} at{" "}
+                        {new Date(entry.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </Text>
                     </View>
-                    <View
-                      className={`px-3 py-1 rounded-full ${getStatusColor(transaction.status)}`}
-                    >
-                      <Text className="text-xs font-semibold capitalize">{transaction.status}</Text>
-                    </View>
+                    <Text className="text-lg font-bold text-success">
+                      +ETB {entry.amount?.toLocaleString() ?? "0"}
+                    </Text>
                   </View>
-                  <Text className="text-muted text-xs">Ref: {transaction.reference}</Text>
                 </View>
               ))
             )}
           </View>
-
-          {/* Payment Info */}
-          <View className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <Text className="text-blue-900 text-sm font-semibold mb-2">💳 Chapa Payment</Text>
-            <Text className="text-blue-800 text-xs leading-relaxed">
-              Powered by Chapa, Ethiopia's leading payment gateway. Your earnings are securely
-              transferred to your bank account within 24 hours.
-            </Text>
-          </View>
         </View>
       </ScrollView>
+  );
+}
+
+export default function EarningsScreen() {
+  return (
+    <ScreenContainer className="p-0">
+      <EarningsContent />
     </ScreenContainer>
   );
 }

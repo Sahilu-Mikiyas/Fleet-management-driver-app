@@ -1,13 +1,24 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  authApi,
+  storeToken,
+  clearToken,
+  getStoredToken,
+  type ApiUser,
+} from "./api-client";
 
 interface Driver {
-  id: number;
+  id: string;
   email: string;
   name: string;
+  phoneNumber: string;
   licenseNumber: string;
-  companyId: string;
+  companyId: string | null;
+  role: string;
   isApproved: boolean;
+  isAvailable: boolean;
+  status: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -17,26 +28,34 @@ interface AuthContextType {
   driver: Driver | null;
   isLoading: boolean;
   isApproved: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (identifier: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshDriver: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Mock driver database
-const MOCK_DRIVERS: Record<string, Driver> = {
-  "driver@test.com": {
-    id: 1,
-    email: "driver@test.com",
-    name: "Test Driver",
-    licenseNumber: "DL123456789",
-    companyId: "comp1",
-    isApproved: true,
-    createdAt: "2026-03-28T09:04:36Z",
-    updatedAt: "2026-03-28T09:04:36Z",
-  },
-};
+const SESSION_KEY = "auth_session";
+
+/**
+ * Map an API User object to our internal Driver type.
+ */
+function mapUserToDriver(user: ApiUser): Driver {
+  return {
+    id: user._id,
+    email: user.email,
+    name: user.fullName,
+    phoneNumber: user.phoneNumber,
+    licenseNumber: "", // license is on the driver profile, not user
+    companyId: user.companyId,
+    role: user.role,
+    isApproved: user.status === "ACTIVE",
+    isAvailable: user.isAvailable ?? false,
+    status: user.status,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+  };
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<{ user: { id: string; email: string } } | null>(null);
@@ -48,14 +67,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        const savedSession = await AsyncStorage.getItem("auth_session");
-        if (savedSession) {
-          const parsedSession = JSON.parse(savedSession);
-          setSession(parsedSession);
-          await fetchDriver(parsedSession.user.email);
+        const token = await getStoredToken();
+        if (token) {
+          // Validate token against the server
+          const response = await authApi.checkAuth();
+          const user = response.data.data.user;
+
+          const driverData = mapUserToDriver(user);
+          setDriver(driverData);
+          setIsApproved(driverData.isApproved);
+          setSession({ user: { id: user._id, email: user.email } });
+
+          // Persist session for offline reference
+          await AsyncStorage.setItem(
+            SESSION_KEY,
+            JSON.stringify({ user: { id: user._id, email: user.email } })
+          );
         }
       } catch (error) {
         console.error("Error initializing auth:", error);
+        // Token is invalid or expired, clear it
+        await clearToken();
+        await AsyncStorage.removeItem(SESSION_KEY);
       } finally {
         setIsLoading(false);
       }
@@ -64,40 +97,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     initializeAuth();
   }, []);
 
-  const fetchDriver = async (email: string) => {
+  const signIn = async (identifier: string, password: string) => {
     try {
-      const mockDriver = MOCK_DRIVERS[email];
-      if (!mockDriver) {
-        throw new Error("Driver not found");
-      }
+      const response = await authApi.login(identifier, password);
+      const { token, data } = response.data;
+      const user = data.user;
 
-      setDriver(mockDriver);
-      setIsApproved(mockDriver.isApproved);
-    } catch (error) {
-      console.error("Error fetching driver:", error);
-      setDriver(null);
-      setIsApproved(false);
-    }
-  };
+      // Store the JWT token
+      await storeToken(token);
 
-  const signIn = async (email: string, password: string) => {
-    try {
-      // Mock authentication - just check if driver exists
-      const mockDriver = MOCK_DRIVERS[email];
-      if (!mockDriver) {
-        throw new Error("Invalid email or password");
-      }
+      const driverData = mapUserToDriver(user);
+      setDriver(driverData);
+      setIsApproved(driverData.isApproved);
 
       const newSession = {
         user: {
-          id: email,
-          email: email,
+          id: user._id,
+          email: user.email,
         },
       };
-
       setSession(newSession);
-      await fetchDriver(email);
-      await AsyncStorage.setItem("auth_session", JSON.stringify(newSession));
+      await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(newSession));
     } catch (error) {
       console.error("Sign in error:", error);
       throw error;
@@ -106,10 +126,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
+      // Call server logout (best effort)
+      try {
+        await authApi.logout();
+      } catch {
+        // Ignore logout API errors
+      }
+
       setSession(null);
       setDriver(null);
       setIsApproved(false);
-      await AsyncStorage.removeItem("auth_session");
+      await clearToken();
+      await AsyncStorage.removeItem(SESSION_KEY);
     } catch (error) {
       console.error("Sign out error:", error);
       throw error;
@@ -117,8 +145,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const refreshDriver = async () => {
-    if (session?.user.email) {
-      await fetchDriver(session.user.email);
+    try {
+      const token = await getStoredToken();
+      if (!token) return;
+
+      const response = await authApi.checkAuth();
+      const user = response.data.data.user;
+
+      const driverData = mapUserToDriver(user);
+      setDriver(driverData);
+      setIsApproved(driverData.isApproved);
+    } catch (error) {
+      console.error("Error refreshing driver:", error);
     }
   };
 

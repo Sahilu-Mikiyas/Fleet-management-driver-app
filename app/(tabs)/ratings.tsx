@@ -3,7 +3,7 @@ import { ScrollView, Text, View, Pressable } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { useRatings } from "@/lib/ratings-context";
 
-export default function RatingsScreen() {
+export function RatingsContent() {
   const { ratings, averageRating, totalRatings, ratingDistribution } = useRatings();
 
   const renderStars = (rating: number) => {
@@ -15,7 +15,6 @@ export default function RatingsScreen() {
   };
 
   return (
-    <ScreenContainer className="p-0">
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View className="bg-primary px-6 py-8">
@@ -82,6 +81,13 @@ export default function RatingsScreen() {
           )}
         </View>
       </ScrollView>
+  );
+}
+
+export default function RatingsScreen() {
+  return (
+    <ScreenContainer className="p-0">
+      <RatingsContent />
     </ScreenContainer>
   );
 }

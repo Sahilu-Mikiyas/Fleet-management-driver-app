@@ -9,7 +9,7 @@ interface ChecklistItem {
   checked: boolean;
 }
 
-export default function InspectionScreen() {
+export function InspectionContent() {
   const [inspectionType, setInspectionType] = useState<"pre" | "post">("pre");
   const [checklist, setChecklist] = useState<ChecklistItem[]>([
     {
@@ -91,7 +91,6 @@ export default function InspectionScreen() {
   const progressPercent = Math.round((completedCount / checklist.length) * 100);
 
   return (
-    <ScreenContainer className="p-0">
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View className="bg-primary px-6 py-6">
@@ -241,6 +240,13 @@ export default function InspectionScreen() {
           </Pressable>
         </View>
       </ScrollView>
+  );
+}
+
+export default function InspectionScreen() {
+  return (
+    <ScreenContainer className="p-0">
+      <InspectionContent />
     </ScreenContainer>
   );
 }

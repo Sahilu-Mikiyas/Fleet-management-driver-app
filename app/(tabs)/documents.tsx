@@ -41,7 +41,7 @@ const getStatusIcon = (status: string) => {
   }
 };
 
-export default function DocumentsScreen() {
+export function DocumentsContent() {
   const { documents, deleteDocument } = useDocuments();
   const [selectedType, setSelectedType] = useState<DocumentType | null>(null);
 
@@ -79,7 +79,6 @@ export default function DocumentsScreen() {
   const pendingCount = documents.filter((doc) => doc.status === "pending").length;
 
   return (
-    <ScreenContainer className="p-0">
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View className="bg-primary px-6 py-6">
@@ -325,6 +324,13 @@ export default function DocumentsScreen() {
           </View>
         </View>
       </ScrollView>
+  );
+}
+
+export default function DocumentsScreen() {
+  return (
+    <ScreenContainer className="p-0">
+      <DocumentsContent />
     </ScreenContainer>
   );
 }

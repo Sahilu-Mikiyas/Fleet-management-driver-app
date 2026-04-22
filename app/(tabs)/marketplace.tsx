@@ -9,7 +9,7 @@ import { useCargoFilters } from "@/lib/cargo-filters-context";
 const { width } = Dimensions.get("window");
 const cardWidth = (width - 32) / 2; // 2 columns with padding
 
-export default function MarketplaceScreen() {
+export function MarketplaceContent() {
   const router = useRouter();
   const { isFavorite, addFavorite, removeFavorite } = useFavorites();
   const { filters, hasActiveFilters } = useCargoFilters();
@@ -137,7 +137,6 @@ export default function MarketplaceScreen() {
   );
 
   return (
-    <ScreenContainer className="p-0">
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View className="bg-primary px-6 py-6">
@@ -266,6 +265,13 @@ export default function MarketplaceScreen() {
           </View>
         </View>
       </ScrollView>
+  );
+}
+
+export default function MarketplaceScreen() {
+  return (
+    <ScreenContainer className="p-0">
+      <MarketplaceContent />
     </ScreenContainer>
   );
 }

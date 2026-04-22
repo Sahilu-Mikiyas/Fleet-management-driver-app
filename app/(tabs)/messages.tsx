@@ -19,7 +19,7 @@ interface Conversation {
   messages: Message[];
 }
 
-export default function MessagesScreen() {
+export function MessagesContent() {
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [messageText, setMessageText] = useState("");
 
@@ -190,7 +190,6 @@ export default function MessagesScreen() {
   }
 
   return (
-    <ScreenContainer className="p-0">
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View className="bg-primary px-6 py-6">
@@ -265,6 +264,13 @@ export default function MessagesScreen() {
           </View>
         </View>
       </ScrollView>
+  );
+}
+
+export default function MessagesScreen() {
+  return (
+    <ScreenContainer className="p-0">
+      <MessagesContent />
     </ScreenContainer>
   );
 }

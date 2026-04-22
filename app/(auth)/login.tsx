@@ -8,20 +8,20 @@ import { cn } from "@/lib/utils";
 export default function LoginScreen() {
   const router = useRouter();
   const { signIn } = useAuth();
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSignIn = async () => {
-    if (!email || !password) {
-      Alert.alert("Error", "Please enter both email and password");
+    if (!identifier || !password) {
+      Alert.alert("Error", "Please enter your email/phone and password");
       return;
     }
 
     setIsLoading(true);
     try {
-      await signIn(email, password);
-      router.replace("/(tabs)");
+      await signIn(identifier.trim(), password);
+      // The root layout handles navigation based on auth state
     } catch (error) {
       Alert.alert("Sign In Failed", error instanceof Error ? error.message : "An error occurred");
     } finally {
@@ -29,9 +29,7 @@ export default function LoginScreen() {
     }
   };
 
-  const handleSkipLogin = () => {
-    router.replace("/(tabs)");
-  };
+
 
   return (
     <ScreenContainer containerClassName="bg-background" edges={["top", "left", "right", "bottom"]}>
@@ -45,14 +43,14 @@ export default function LoginScreen() {
             </Text>
           </View>
 
-          {/* Email Input */}
+          {/* Email / Phone Input */}
           <View className="mb-6">
-            <Text className="text-sm font-semibold text-foreground mb-2">Email</Text>
+            <Text className="text-sm font-semibold text-foreground mb-2">Email or Phone</Text>
             <TextInput
-              placeholder="Enter your email"
+              placeholder="Enter email or phone number"
               placeholderTextColor="#9BA1A6"
-              value={email}
-              onChangeText={setEmail}
+              value={identifier}
+              onChangeText={setIdentifier}
               editable={!isLoading}
               keyboardType="email-address"
               autoCapitalize="none"
@@ -92,25 +90,10 @@ export default function LoginScreen() {
             </View>
           </Pressable>
 
-          {/* Skip Login Button (For Testing) */}
-          <Pressable
-            onPress={handleSkipLogin}
-            style={({ pressed }) => [
-              {
-                transform: [{ scale: pressed ? 0.97 : 1 }],
-              },
-            ]}
-          >
-            <View className="bg-surface border border-border rounded-lg py-4 items-center mt-3">
-              <Text className="text-base font-semibold text-foreground">Skip Login (Testing)</Text>
-            </View>
-          </Pressable>
-
           {/* Info Text */}
-          <View className="mt-12 p-4 bg-surface rounded-lg border border-border">
+          <View className="mt-8 p-4 bg-surface rounded-lg border border-border">
             <Text className="text-xs text-muted leading-relaxed">
-              Use your company email and password to sign in. If you don't have an account or forgot your password,
-              contact your fleet administrator.
+              Sign in with your company email or phone number. Contact your fleet administrator if you need help.
             </Text>
           </View>
         </View>

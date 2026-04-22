@@ -28,90 +28,50 @@ function TabLayoutContent() {
         },
       }}
     >
+      {/* ── 4 Visible Tabs ── */}
       <Tabs.Screen
-        name="marketplace"
+        name="dashboard"
         options={{
-          title: "Marketplace",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="bag.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "Home",
+          title: "Dashboard",
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
         }}
       />
       <Tabs.Screen
-        name="map"
+        name="market"
         options={{
-          title: "Map",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="map.fill" color={color} />,
+          title: "Market",
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="bag.fill" color={color} />,
         }}
       />
       <Tabs.Screen
-        name="notifications"
+        name="inbox"
         options={{
-          title: "Updates",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="bell.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="inspection"
-        options={{
-          title: "Inspection",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="checkmark.circle.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="history"
-        options={{
-          title: "History",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="clock.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="messages"
-        options={{
-          title: "Messages",
+          title: "Inbox",
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="message.fill" color={color} />,
         }}
       />
       <Tabs.Screen
-        name="profile"
+        name="account"
         options={{
-          title: "Profile",
+          title: "Account",
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.fill" color={color} />,
         }}
       />
-      <Tabs.Screen
-        name="favorites"
-        options={{
-          title: "Saved",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="heart.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="ratings"
-        options={{
-          title: "Ratings",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="star.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="earnings"
-        options={{
-          title: "Earnings",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="documents"
-        options={{
-          title: "Documents",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="doc.fill" color={color} />,
-        }}
-      />
+
+      {/* ── Hidden Screens (still routable, but not shown in tab bar) ── */}
+      <Tabs.Screen name="index" options={{ href: null }} />
+      <Tabs.Screen name="marketplace" options={{ href: null }} />
+      <Tabs.Screen name="map" options={{ href: null }} />
+      <Tabs.Screen name="notifications" options={{ href: null }} />
+      <Tabs.Screen name="inspection" options={{ href: null }} />
+      <Tabs.Screen name="history" options={{ href: null }} />
+      <Tabs.Screen name="messages" options={{ href: null }} />
+      <Tabs.Screen name="profile" options={{ href: null }} />
+      <Tabs.Screen name="favorites" options={{ href: null }} />
+      <Tabs.Screen name="ratings" options={{ href: null }} />
+      <Tabs.Screen name="earnings" options={{ href: null }} />
+      <Tabs.Screen name="documents" options={{ href: null }} />
+      <Tabs.Screen name="trip-detail" options={{ href: null }} />
     </Tabs>
   );
 }

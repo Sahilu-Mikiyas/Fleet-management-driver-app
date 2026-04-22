@@ -19,7 +19,7 @@ interface LocationData {
   accuracy: number | null;
 }
 
-export default function MapScreen() {
+export function MapContent() {
   const [location, setLocation] = useState<LocationData | null>(null);
   const [selectedRoute, setSelectedRoute] = useState(0);
   const [distance, setDistance] = useState("12.5 km");
@@ -135,7 +135,6 @@ export default function MapScreen() {
   );
 
   return (
-    <ScreenContainer className="p-0">
       <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
         {/* Map Preview */}
         <View className="bg-surface border-b border-border">
@@ -291,6 +290,13 @@ export default function MapScreen() {
 
         <View className="h-6" />
       </ScrollView>
+  );
+}
+
+export default function MapScreen() {
+  return (
+    <ScreenContainer className="p-0">
+      <MapContent />
     </ScreenContainer>
   );
 }

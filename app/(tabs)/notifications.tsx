@@ -2,7 +2,7 @@ import React from "react";
 import { ScrollView, Text, View } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 
-export default function NotificationsScreen() {
+export function NotificationsContent() {
   const mockNotifications = [
     { id: "n1", title: "New Assignment", message: "Route A has been assigned to you", time: "2 hours ago" },
     { id: "n2", title: "Account Approved", message: "Your driver account has been approved", time: "1 day ago" },
@@ -10,7 +10,6 @@ export default function NotificationsScreen() {
   ];
 
   return (
-    <ScreenContainer className="p-0">
       <ScrollView showsVerticalScrollIndicator={false}>
         <View className="bg-primary px-6 py-6">
           <Text className="text-white text-2xl font-bold">Updates</Text>
@@ -28,6 +27,13 @@ export default function NotificationsScreen() {
           ))}
         </View>
       </ScrollView>
+  );
+}
+
+export default function NotificationsScreen() {
+  return (
+    <ScreenContainer className="p-0">
+      <NotificationsContent />
     </ScreenContainer>
   );
 }

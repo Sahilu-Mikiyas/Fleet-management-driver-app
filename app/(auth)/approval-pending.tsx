@@ -52,9 +52,9 @@ export default function ApprovalPendingScreen() {
             <View className="w-16 h-16 rounded-full bg-warning/20 items-center justify-center mb-4">
               <Text className="text-4xl">⏳</Text>
             </View>
-            <Text className="text-2xl font-bold text-foreground mb-2">Approval Pending</Text>
-            <Text className="text-base text-muted text-center">
-              Your account is waiting for administrator approval
+            <Text className="text-2xl font-bold text-foreground mb-2">Application Submitted</Text>
+            <Text className="text-base text-muted text-center px-4">
+              Your {driver?.role === "PRIVATE_TRANSPORTER" ? "Fleet Provider" : "Driver"} application is currently under review by our administration team.
             </Text>
           </View>
 
