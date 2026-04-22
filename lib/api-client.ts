@@ -270,25 +270,33 @@ export const driverApi = {
     apiClient.get("/driver/assignments"),
 
   acceptAssignment: (orderId: string) =>
-    apiClient.post(`/driver/assignments/${orderId}/accept`),
+    apiClient.patch(`/driver/assignments/${orderId}/accept`),
 
   rejectAssignment: (orderId: string) =>
-    apiClient.post(`/driver/assignments/${orderId}/reject`),
+    apiClient.patch(`/driver/assignments/${orderId}/reject`),
 
   startAssignment: (orderId: string) =>
-    apiClient.post(`/driver/assignments/${orderId}/start`),
+    apiClient.patch(`/driver/assignments/${orderId}/start`),
 
   arriveAtPickup: (orderId: string) =>
-    apiClient.post(`/driver/assignments/${orderId}/arrive`),
+    apiClient.patch(`/driver/assignments/${orderId}/arrive`),
 
   completeAssignment: (orderId: string) =>
-    apiClient.post(`/driver/assignments/${orderId}/complete`),
+    apiClient.patch(`/driver/assignments/${orderId}/complete`),
 
   updateStatus: (status: string, isAvailable: boolean) =>
-    apiClient.put("/driver/status", { status, isAvailable }),
+    apiClient.patch("/driver/status", { status, isAvailable }),
 
-  streamLocation: (latitude: number, longitude: number, accuracy?: number) =>
-    apiClient.post("/driver/location", { latitude, longitude, accuracy }),
+  streamLocation: (tripId: string, longitude: number, latitude: number, speed?: number, heading?: number) =>
+    apiClient.post("/driver/location", {
+      tripId,
+      location: {
+        type: "Point",
+        coordinates: [longitude, latitude],
+        speed,
+        heading,
+      },
+    }),
 
   getCommission: () =>
     apiClient.get("/driver/commission"),

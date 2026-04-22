@@ -55,11 +55,12 @@ export function DeliveryVerificationModal({ tripId, isVisible, onClose, onSucces
       // 1. Upload Evidence
       if (evidencePhoto) {
         const formData = new FormData() as any;
-        formData.append("evidence", {
+        formData.append("file", {
           uri: evidencePhoto,
           name: `pod-${tripId}.jpg`,
           type: "image/jpeg",
         });
+        formData.append("type", "photo");
         await driverApi.uploadEvidence(tripId, formData);
       }
 
