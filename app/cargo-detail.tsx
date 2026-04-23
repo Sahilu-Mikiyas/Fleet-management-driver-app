@@ -122,7 +122,9 @@ export default function CargoDetailScreen() {
     );
   }
 
-  const isTransporter = driver?.role === "PRIVATE_TRANSPORTER";
+  const UMBRELLA_COMPANY_ID = process.env.EXPO_PUBLIC_UMBRELLA_COMPANY_ID;
+  const isTransporter = driver?.companyId === UMBRELLA_COMPANY_ID;
+  
   const cargoType = cargo.cargo?.type || "standard";
   const budget = cargo.pricing?.proposedBudget || 0;
   const currency = cargo.pricing?.currency || "ETB";

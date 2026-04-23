@@ -14,7 +14,8 @@ function TabLayoutContent() {
   const bottomPadding = Platform.OS === "web" ? 12 : Math.max(insets.bottom, 8);
   const tabBarHeight = 56 + bottomPadding;
 
-  const isDriver = driver?.role === "DRIVER";
+  const UMBRELLA_COMPANY_ID = process.env.EXPO_PUBLIC_UMBRELLA_COMPANY_ID;
+  const isPrivateTransporter = driver?.companyId === UMBRELLA_COMPANY_ID;
 
   return (
     <Tabs
@@ -44,7 +45,7 @@ function TabLayoutContent() {
         name="market"
         options={{
           title: "Market",
-          href: isDriver ? null : undefined, // Hide entirely for DRIVER
+          href: isPrivateTransporter ? undefined : null, // Show only for Private Transporters (umbrella company)
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="bag.fill" color={color} />,
         }}
       />
