@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { View, Text, Pressable, ScrollView, ActivityIndicator, Linking, Platform, Alert } from "react-native";
+import { View, Text, Pressable, ActivityIndicator, Linking, Platform, Alert } from "react-native";
+import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import { useColors } from "@/hooks/use-colors";
 import { driverApi } from "@/lib/api-client";
 import { DeliveryVerificationModal } from "./delivery-verification-modal";
@@ -128,7 +129,7 @@ export function ActiveTrip({ assignment, isLoading, onRefresh }: ActiveTripProps
 
   return (
     <>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16, gap: 16 }}>
+      <BottomSheetScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16, gap: 16 }}>
         {/* Status Banner */}
         <View className={`${banner.bg} border ${banner.border} rounded-xl p-4 flex-row items-center justify-between`}>
           <View className="flex-1">
@@ -289,7 +290,7 @@ export function ActiveTrip({ assignment, isLoading, onRefresh }: ActiveTripProps
         </View>
 
         <View className="h-12" />
-      </ScrollView>
+      </BottomSheetScrollView>
 
       <DeliveryVerificationModal
         tripId={assignment._id}

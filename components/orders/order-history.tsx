@@ -1,5 +1,6 @@
 import React from "react";
-import { View, Text, ScrollView, ActivityIndicator, Pressable } from "react-native";
+import { View, Text, ActivityIndicator, Pressable } from "react-native";
+import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import { useColors } from "@/hooks/use-colors";
 import { useRouter } from "expo-router";
 
@@ -56,7 +57,7 @@ export function OrderHistory({ trips, isLoading }: OrderHistoryProps) {
   };
 
   return (
-    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16, gap: 12 }}>
+    <BottomSheetScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16, gap: 12 }}>
       {trips.map((trip) => (
         <Pressable
           key={trip._id}
@@ -115,6 +116,6 @@ export function OrderHistory({ trips, isLoading }: OrderHistoryProps) {
         </Pressable>
       ))}
       <View className="h-12" />
-    </ScrollView>
+    </BottomSheetScrollView>
   );
 }
