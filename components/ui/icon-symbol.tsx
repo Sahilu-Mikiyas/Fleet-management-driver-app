@@ -28,6 +28,7 @@ const MAPPING = {
   "heart.fill": "favorite",
   "star.fill": "star",
   "doc.fill": "description",
+  "list.bullet.rectangle.fill": "assignment",
 } as IconMapping;
 
 /**
