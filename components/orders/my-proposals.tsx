@@ -24,6 +24,15 @@ export function MyProposals() {
     }
   };
 
+  const handleWithdraw = async (proposalId: string) => {
+    try {
+      await ordersApi.withdrawProposal(proposalId);
+      fetchProposals();
+    } catch (error) {
+      console.error("Failed to withdraw proposal:", error);
+    }
+  };
+
   useEffect(() => {
     fetchProposals();
   }, []);
@@ -131,6 +140,25 @@ export function MyProposals() {
                   </View>
                 )}
               </View>
+
+              {/* Withdraw Button */}
+              {proposal.status?.toUpperCase() === "PENDING" && (
+                <Pressable
+                  onPress={() => {
+                    Alert.alert(
+                      "Withdraw Bid",
+                      "Are you sure you want to withdraw this proposal?",
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        { text: "Withdraw", style: "destructive", onPress: () => handleWithdraw(proposal._id) }
+                      ]
+                    );
+                  }}
+                  className="mt-3 bg-error/10 py-2 rounded-lg items-center border border-error/20"
+                >
+                  <Text className="text-error text-xs font-bold">Withdraw Bid</Text>
+                </Pressable>
+              )}
             </View>
           </Pressable>
         );

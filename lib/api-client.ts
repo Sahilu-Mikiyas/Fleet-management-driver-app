@@ -341,6 +341,9 @@ export const ordersApi = {
 
   getMyProposals: () =>
     apiClient.get("/orders/proposals/mine"),
+
+  withdrawProposal: (proposalId: string) =>
+    apiClient.delete(`/orders/proposals/${proposalId}`),
 };
 
 // Trips
