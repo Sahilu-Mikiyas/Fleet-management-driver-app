@@ -106,6 +106,7 @@ const config: ExpoConfig = {
         locationAlwaysAndWhenInUsePermission: "Allow $(PRODUCT_NAME) to access your location.",
       },
     ],
+    "react-native-maps",
   ],
   experiments: {
     typedRoutes: true,
