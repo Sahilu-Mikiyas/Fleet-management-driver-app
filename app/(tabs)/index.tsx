@@ -23,8 +23,6 @@ export function HomeContent() {
         </Text>
       </View>
 
-      {/* The Persistent Orders Hub Bottom Sheet */}
-      <OrdersHub />
     </View>
   );
 }

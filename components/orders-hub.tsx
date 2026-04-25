@@ -1,6 +1,5 @@
-import React, { useMemo, useState, useCallback, useEffect, useRef } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import { View, Text, StyleSheet, Pressable, Alert, AppState } from "react-native";
-import BottomSheet, { BottomSheetView } from "@gorhom/bottom-sheet";
 import * as Notifications from "expo-notifications";
 import { useColors } from "@/hooks/use-colors";
 import { SegmentedControl } from "@/components/segmented-control";
@@ -34,9 +33,6 @@ export function OrdersHub() {
   // Data States
   const [assignments, setAssignments] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
-
-  // Snap points for the bottom sheet
-  const snapPoints = useMemo(() => ["25%", "50%", "90%"], []);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -136,56 +132,49 @@ export function OrdersHub() {
   ];
 
   return (
-    <BottomSheet
-      index={1}
-      snapPoints={snapPoints}
-      backgroundStyle={{ backgroundColor: colors.background }}
-      handleIndicatorStyle={{ backgroundColor: colors.muted }}
-    >
-      <BottomSheetView style={styles.contentContainer}>
-        {/* Header */}
-        <View className="px-4 pb-4 border-b border-border">
-          <View className="flex-row items-center justify-between mb-4">
-            <Text className="text-xl font-bold text-foreground">Orders Hub</Text>
+    <View style={styles.contentContainer}>
+      {/* Header */}
+      <View className="px-4 pb-4 pt-4 border-b border-border bg-background">
+        <View className="flex-row items-center justify-between mb-4">
+          <Text className="text-xl font-bold text-foreground">Orders Hub</Text>
 
-            {/* ── Availability Toggle ── */}
-            <Pressable
-              onPress={handleToggleAvailability}
-              disabled={isTogglingAvailability}
-              className={`flex-row items-center gap-2 px-3 py-1.5 rounded-full border ${
-                driver?.isAvailable
-                  ? "bg-success/10 border-success/30"
-                  : "bg-error/10 border-error/30"
-              }`}
-              style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
-            >
-              <View className={`w-2.5 h-2.5 rounded-full ${driver?.isAvailable ? "bg-success" : "bg-error"}`} />
-              <Text className={`text-xs font-bold ${driver?.isAvailable ? "text-success" : "text-error"}`}>
-                {isTogglingAvailability ? "..." : driver?.isAvailable ? "ONLINE" : "OFFLINE"}
-              </Text>
-            </Pressable>
-          </View>
-          <SegmentedControl
-            segments={tabs}
-            activeKey={activeTab}
-            onSelect={setActiveTab}
-          />
+          {/* ── Availability Toggle ── */}
+          <Pressable
+            onPress={handleToggleAvailability}
+            disabled={isTogglingAvailability}
+            className={`flex-row items-center gap-2 px-3 py-1.5 rounded-full border ${
+              driver?.isAvailable
+                ? "bg-success/10 border-success/30"
+                : "bg-error/10 border-error/30"
+            }`}
+            style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+          >
+            <View className={`w-2.5 h-2.5 rounded-full ${driver?.isAvailable ? "bg-success" : "bg-error"}`} />
+            <Text className={`text-xs font-bold ${driver?.isAvailable ? "text-success" : "text-error"}`}>
+              {isTogglingAvailability ? "..." : driver?.isAvailable ? "ONLINE" : "OFFLINE"}
+            </Text>
+          </Pressable>
         </View>
+        <SegmentedControl
+          segments={tabs}
+          activeKey={activeTab}
+          onSelect={setActiveTab}
+        />
+      </View>
 
-        {/* Content Area */}
-        <View className="flex-1 bg-surface">
-          {activeTab === "active" && (
-            <ActiveTrip assignment={activeOrder} isLoading={isLoading} onRefresh={fetchData} />
-          )}
-          {activeTab === "pending" && (
-            <PendingAssignments assignments={pendingOrders} isLoading={isLoading} onRefresh={fetchData} />
-          )}
-          {activeTab === "history" && (
-            <OrderHistory trips={history} isLoading={isLoading} />
-          )}
-        </View>
-      </BottomSheetView>
-    </BottomSheet>
+      {/* Content Area */}
+      <View className="flex-1 bg-surface">
+        {activeTab === "active" && (
+          <ActiveTrip assignment={activeOrder} isLoading={isLoading} onRefresh={fetchData} />
+        )}
+        {activeTab === "pending" && (
+          <PendingAssignments assignments={pendingOrders} isLoading={isLoading} onRefresh={fetchData} />
+        )}
+        {activeTab === "history" && (
+          <OrderHistory trips={history} isLoading={isLoading} />
+        )}
+      </View>
+    </View>
   );
 }
 

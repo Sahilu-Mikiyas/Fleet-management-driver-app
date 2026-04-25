@@ -1,6 +1,5 @@
 import React from "react";
-import { View, Text, Pressable, ActivityIndicator } from "react-native";
-import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
+import { View, Text, Pressable, ActivityIndicator, ScrollView } from "react-native";
 import { useColors } from "@/hooks/use-colors";
 import { driverApi } from "@/lib/api-client";
 import * as Haptics from "expo-haptics";
@@ -67,7 +66,7 @@ export function PendingAssignments({ assignments, isLoading, onRefresh }: Pendin
   }
 
   return (
-    <BottomSheetScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16, gap: 16 }}>
+    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16, gap: 16 }}>
       {assignments.map((assignment) => (
         <View key={assignment._id} className="bg-surface rounded-xl p-4 border border-border">
           <View className="flex-row justify-between items-start mb-3">
@@ -150,6 +149,6 @@ export function PendingAssignments({ assignments, isLoading, onRefresh }: Pendin
           </View>
         </View>
       ))}
-    </BottomSheetScrollView>
+    </ScrollView>
   );
 }

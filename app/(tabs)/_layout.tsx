@@ -42,6 +42,13 @@ function TabLayoutContent() {
         }}
       />
       <Tabs.Screen
+        name="orders"
+        options={{
+          title: "Orders",
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="list.bullet.rectangle.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="market"
         options={{
           title: "Market",
