@@ -20,6 +20,9 @@ const env = {
   scheme: schemeFromBundleId,
   iosBundleId: bundleId,
   androidPackage: bundleId,
+  // Google Maps API key — required for react-native-maps on Android
+  // Set GOOGLE_MAPS_API_KEY in your .env file or EAS secrets
+  googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY ?? "",
 };
 
 const config: ExpoConfig = {
@@ -36,6 +39,12 @@ const config: ExpoConfig = {
     bundleIdentifier: env.iosBundleId,
   },
   android: {
+    googleServicesFile: "./google-services.json",
+    config: {
+      googleMaps: {
+        apiKey: env.googleMapsApiKey,
+      },
+    },
     adaptiveIcon: {
       backgroundColor: "#E6F4FE",
       foregroundImage: "./assets/images/android-icon-foreground.png",
@@ -67,6 +76,7 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-router",
+    "expo-dev-client",
     [
       "expo-audio",
       {
