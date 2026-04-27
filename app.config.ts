@@ -1,6 +1,8 @@
 // Load environment variables with proper priority (system > .env)
 require("./scripts/load-env.js");
 import type { ExpoConfig } from "expo/config";
+import { existsSync } from "fs";
+import { resolve } from "path";
 
 // Bundle ID format: space.manus.<project_name_dots>.<timestamp>
 // e.g., "my-app" created at 2024-01-15 10:30:45 -> "space.manus.my.app.t20240115103045"
@@ -39,7 +41,9 @@ const config: ExpoConfig = {
     bundleIdentifier: env.iosBundleId,
   },
   android: {
-    googleServicesFile: "./google-services.json",
+    ...(existsSync(resolve(__dirname, "google-services.json")) && {
+      googleServicesFile: "./google-services.json",
+    }),
     config: {
       googleMaps: {
         apiKey: env.googleMapsApiKey,
