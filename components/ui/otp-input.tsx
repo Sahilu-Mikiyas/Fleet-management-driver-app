@@ -43,7 +43,7 @@ export function OTPInput({ length = 4, value, onChange, disabled = false }: OTPI
       {Array.from({ length }).map((_, index) => (
         <TextInput
           key={index}
-          ref={(ref) => (inputRefs.current[index] = ref)}
+          ref={(ref) => { inputRefs.current[index] = ref; }}
           className={`w-14 h-16 text-center text-2xl font-bold rounded-xl border-2 ${
             valueArray[index] ? "border-primary" : "border-border"
           } bg-surface`}
