@@ -136,6 +136,45 @@ export function ActiveTrip({ assignment, isLoading, onRefresh }: ActiveTripProps
   const currentIdx = getStepIndex(assignment.status);
   const nextStep = TIMELINE_STEPS[currentIdx + 1];
 
+  const handleOpenNavigation = () => {
+    const target = currentIdx >= 3 ? assignment.deliveryLocation : assignment.pickupLocation;
+    if (target?.latitude) {
+      const url = Platform.select({
+        ios: `maps://app?daddr=${target.latitude},${target.longitude}`,
+        android: `google.navigation:q=${target.latitude},${target.longitude}`,
+        default: `https://www.google.com/maps/dir/?api=1&destination=${target.latitude},${target.longitude}`,
+      });
+      Linking.openURL(url!);
+    }
+  };
+
+  const handleMilestone = async (type: "start" | "arrive") => {
+    if (!assignment || actionLoading) return;
+    setActionLoading(true);
+    try {
+      const loc = await updateLocation();
+      if (type === "start") {
+        await driverApi.startAssignment(assignment._id);
+      } else {
+        await driverApi.arriveAtPickup(assignment._id);
+      }
+      if (loc) {
+        await driverApi.streamLocation(
+          assignment._id,
+          loc.coords.longitude,
+          loc.coords.latitude,
+          loc.coords.speed || 0,
+          loc.coords.heading || 0
+        );
+      }
+      onRefresh();
+    } catch (error: any) {
+      Alert.alert("Status Update Failed", error.message || "Something went wrong.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   return (
     <View className="flex-1">
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
@@ -157,14 +196,14 @@ export function ActiveTrip({ assignment, isLoading, onRefresh }: ActiveTripProps
           >
             {assignment.pickupLocation?.latitude && (
               <Marker
-                coordinate={{ latitude: assignment.pickupLocation.latitude, longitude: assignment.pickupLocation.longitude }}
+                coordinate={{ latitude: assignment.pickupLocation.latitude!, longitude: assignment.pickupLocation.longitude! }}
                 title="Pickup"
                 pinColor="blue"
               />
             )}
             {assignment.deliveryLocation?.latitude && (
               <Marker
-                coordinate={{ latitude: assignment.deliveryLocation.latitude, longitude: assignment.deliveryLocation.longitude }}
+                coordinate={{ latitude: assignment.deliveryLocation.latitude!, longitude: assignment.deliveryLocation.longitude! }}
                 title="Delivery"
                 pinColor="green"
               />
@@ -172,8 +211,8 @@ export function ActiveTrip({ assignment, isLoading, onRefresh }: ActiveTripProps
             {assignment.pickupLocation?.latitude && assignment.deliveryLocation?.latitude && (
               <Polyline
                 coordinates={[
-                  { latitude: assignment.pickupLocation.latitude, longitude: assignment.pickupLocation.longitude },
-                  { latitude: assignment.deliveryLocation.latitude, longitude: assignment.deliveryLocation.longitude },
+                  { latitude: assignment.pickupLocation.latitude!, longitude: assignment.pickupLocation.longitude! },
+                  { latitude: assignment.deliveryLocation.latitude!, longitude: assignment.deliveryLocation.longitude! },
                 ]}
                 strokeColor={colors.primary}
                 strokeWidth={3}
@@ -274,14 +313,10 @@ export function ActiveTrip({ assignment, isLoading, onRefresh }: ActiveTripProps
                   <Text className="text-white font-bold text-lg mr-2">
                     Update to: {nextStep.label}
                   </Text>
-                <Text className="text-sm text-muted font-semibold">DELIVERY</Text>
-                <Text className="text-base text-foreground font-bold mt-1">
-                  {assignment.deliveryLocation?.address || "Unknown Address"}
-                </Text>
-                <Text className="text-sm text-muted">{assignment.deliveryLocation?.city}</Text>
-              </View>
-            </View>
-          </View>
+                </>
+              )}
+            </Pressable>
+          )}
         </View>
 
         {/* Cargo Quick Info */}
@@ -370,6 +405,6 @@ export function ActiveTrip({ assignment, isLoading, onRefresh }: ActiveTripProps
           onRefresh();
         }}
       />
-    </>
+    </View>
   );
 }
