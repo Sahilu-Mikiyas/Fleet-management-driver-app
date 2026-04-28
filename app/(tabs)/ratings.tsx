@@ -1,93 +1,109 @@
-import React from "react";
-import { ScrollView, Text, View, Pressable } from "react-native";
+import React, { useEffect, useRef } from "react";
+import { ScrollView, Text, View, Animated } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { useRatings } from "@/lib/ratings-context";
 
+function StarRow({ filled, total = 5 }: { filled: number; total?: number }) {
+  return (
+    <View className="flex-row gap-0.5">
+      {Array.from({ length: total }).map((_, i) => (
+        <Text key={i} style={{ fontSize: 13, opacity: i < filled ? 1 : 0.25 }}>⭐</Text>
+      ))}
+    </View>
+  );
+}
+
+function RatingCard({ rating, index }: { rating: any; index: number }) {
+  const anim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.spring(anim, { toValue: 1, useNativeDriver: true, tension: 90, friction: 18, delay: index * 60 }).start();
+  }, []);
+  return (
+    <Animated.View style={{ opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }}>
+      <View className="bg-surface rounded-2xl border border-border p-4">
+        <View className="flex-row justify-between items-start mb-2">
+          <View className="flex-1 pr-3">
+            <Text className="text-sm font-bold text-foreground">{rating.shipper}</Text>
+            <Text className="text-xs text-muted mt-0.5">{rating.date}</Text>
+          </View>
+          <StarRow filled={rating.rating} />
+        </View>
+        {rating.cargoType && (
+          <View className="bg-primary/10 border border-primary/20 self-start px-2.5 py-1 rounded-full mb-2">
+            <Text className="text-primary text-[10px] font-bold">{rating.cargoType}</Text>
+          </View>
+        )}
+        <Text className="text-sm text-muted leading-5">{rating.feedback}</Text>
+      </View>
+    </Animated.View>
+  );
+}
+
 export function RatingsContent() {
   const { ratings, averageRating, totalRatings, ratingDistribution } = useRatings();
+  const headerAnim = useRef(new Animated.Value(0)).current;
 
-  const renderStars = (rating: number) => {
-    return Array.from({ length: 5 }).map((_, i) => (
-      <Text key={i} className="text-lg">
-        {i < rating ? "⭐" : "☆"}
-      </Text>
-    ));
-  };
+  useEffect(() => {
+    Animated.spring(headerAnim, { toValue: 1, useNativeDriver: true, tension: 120, friction: 20 }).start();
+  }, []);
 
   return (
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View className="bg-primary px-6 py-8">
-          <View className="items-center">
-            <Text className="text-5xl font-bold text-white mb-2">{averageRating.toFixed(1)}</Text>
-            <View className="flex-row gap-1 mb-2">{renderStars(Math.round(averageRating))}</View>
-            <Text className="text-white text-sm opacity-80">{totalRatings} ratings from shippers</Text>
-          </View>
-        </View>
+    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+      {/* Navy header with score */}
+      <Animated.View
+        className="bg-navy px-6 pt-8 pb-8 items-center"
+        style={{ opacity: headerAnim, transform: [{ translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-16, 0] }) }] }}
+      >
+        <Text className="text-white text-6xl font-bold">{averageRating.toFixed(1)}</Text>
+        <StarRow filled={Math.round(averageRating)} />
+        <Text className="text-white/60 text-sm mt-2">{totalRatings} ratings from shippers</Text>
+      </Animated.View>
 
-        <View className="px-6 py-6">
-          {/* Rating Distribution */}
-          <View className="bg-surface rounded-lg p-4 mb-6 border border-border">
-            <Text className="text-lg font-bold text-foreground mb-4">Rating Breakdown</Text>
-            {[5, 4, 3, 2, 1].map((rating) => (
-              <View key={rating} className="flex-row items-center gap-3 mb-3">
-                <View className="flex-row gap-1 w-12">
-                  {renderStars(rating)}
+      <View className="px-4 pt-5 gap-4">
+        {/* Distribution breakdown */}
+        <View className="bg-surface rounded-2xl border border-border p-5">
+          <Text className="text-xs font-bold text-muted uppercase tracking-widest mb-4">Rating Breakdown</Text>
+          {[5, 4, 3, 2, 1].map((star) => {
+            const pct = totalRatings > 0 ? (ratingDistribution[star] / totalRatings) * 100 : 0;
+            return (
+              <View key={star} className="flex-row items-center gap-3 mb-2.5">
+                <View className="flex-row gap-0.5 w-16">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Text key={i} style={{ fontSize: 11, opacity: i < star ? 1 : 0.2 }}>⭐</Text>
+                  ))}
                 </View>
                 <View className="flex-1 h-2 bg-border rounded-full overflow-hidden">
-                  <View
-                    className="h-full bg-primary"
-                    style={{
-                      width: `${totalRatings > 0 ? (ratingDistribution[rating] / totalRatings) * 100 : 0}%`,
-                    }}
+                  <Animated.View
+                    className="h-full bg-primary rounded-full"
+                    style={{ width: `${pct}%` }}
                   />
                 </View>
-                <Text className="text-sm text-muted w-8 text-right">{ratingDistribution[rating]}</Text>
+                <Text className="text-xs text-muted w-6 text-right">{ratingDistribution[star]}</Text>
               </View>
-            ))}
-          </View>
-
-          {/* Recent Ratings */}
-          <Text className="text-lg font-bold text-foreground mb-4">Recent Feedback</Text>
-
-          {ratings.length === 0 ? (
-            <View className="items-center justify-center py-12">
-              <Text className="text-3xl mb-2">📝</Text>
-              <Text className="text-lg font-semibold text-foreground mb-2">No Ratings Yet</Text>
-              <Text className="text-sm text-muted text-center">
-                Complete trips to receive ratings from shippers and build your reputation
-              </Text>
-            </View>
-          ) : (
-            <View className="gap-3">
-              {ratings.map((rating) => (
-                <View key={rating.id} className="bg-surface rounded-lg p-4 border border-border">
-                  <View className="flex-row justify-between items-start mb-2">
-                    <View>
-                      <Text className="font-semibold text-foreground">{rating.shipper}</Text>
-                      <Text className="text-xs text-muted mt-1">{rating.date}</Text>
-                    </View>
-                    <View className="flex-row gap-1">{renderStars(rating.rating)}</View>
-                  </View>
-
-                  <Text className="text-xs bg-primary/10 text-primary rounded px-2 py-1 self-start mb-2">
-                    {rating.cargoType}
-                  </Text>
-
-                  <Text className="text-sm text-foreground leading-relaxed">{rating.feedback}</Text>
-                </View>
-              ))}
-            </View>
-          )}
+            );
+          })}
         </View>
-      </ScrollView>
+
+        {/* Recent ratings */}
+        <Text className="text-xs font-bold text-muted uppercase tracking-widest">Recent Feedback</Text>
+        {ratings.length === 0 ? (
+          <View className="bg-surface rounded-2xl border border-border p-10 items-center">
+            <Text className="text-4xl mb-3">⭐</Text>
+            <Text className="text-foreground font-bold text-base mb-1">No Ratings Yet</Text>
+            <Text className="text-muted text-sm text-center leading-5">
+              Complete trips to receive ratings from shippers and build your reputation.
+            </Text>
+          </View>
+        ) : (
+          <View className="gap-3">
+            {ratings.map((r, i) => <RatingCard key={r.id} rating={r} index={i} />)}
+          </View>
+        )}
+      </View>
+    </ScrollView>
   );
 }
 
 export default function RatingsScreen() {
-  return (
-    <ScreenContainer className="p-0">
-      <RatingsContent />
-    </ScreenContainer>
-  );
+  return <ScreenContainer className="p-0"><RatingsContent /></ScreenContainer>;
 }

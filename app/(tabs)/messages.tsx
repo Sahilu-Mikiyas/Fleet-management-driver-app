@@ -1,6 +1,7 @@
-import React, { useState } from "react";
-import { ScrollView, Text, View, Pressable, TextInput, Alert } from "react-native";
-import { ScreenContainer } from "@/components/screen-container";
+import React, { useState, useRef, useEffect } from "react";
+import { ScrollView, Text, View, Pressable, TextInput, Alert, Animated, KeyboardAvoidingView, Platform } from "react-native";
+import { useColors } from "@/hooks/use-colors";
+import * as Haptics from "expo-haptics";
 
 interface Message {
   id: string;
@@ -13,264 +14,208 @@ interface Message {
 interface Conversation {
   id: string;
   dispatcherName: string;
+  avatar: string;
   lastMessage: string;
   timestamp: string;
   unread: number;
   messages: Message[];
 }
 
-export function MessagesContent() {
-  const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
-  const [messageText, setMessageText] = useState("");
+const CONVERSATIONS: Conversation[] = [
+  {
+    id: "c1", dispatcherName: "Dispatch Center", avatar: "📡",
+    lastMessage: "Your next assignment is ready", timestamp: "2 min ago", unread: 1,
+    messages: [
+      { id: "m1", sender: "dispatcher", content: "Good morning! How's your day going?", timestamp: "9:00 AM", type: "text" },
+      { id: "m2", sender: "driver", content: "Morning! All good, ready for assignments.", timestamp: "9:05 AM", type: "text" },
+      { id: "m3", sender: "dispatcher", content: "Your next assignment is ready. Check Orders.", timestamp: "9:15 AM", type: "status_update" },
+    ],
+  },
+  {
+    id: "c2", dispatcherName: "Fleet Support", avatar: "🛠️",
+    lastMessage: "Please update your vehicle documents", timestamp: "1 hr ago", unread: 0,
+    messages: [
+      { id: "m4", sender: "dispatcher", content: "Please update your vehicle documents before your next trip.", timestamp: "8:00 AM", type: "alert" },
+    ],
+  },
+];
 
-  const conversations: Conversation[] = [
-    {
-      id: "c1",
-      dispatcherName: "John Manager",
-      lastMessage: "Your next assignment is ready",
-      timestamp: "2 min ago",
-      unread: 1,
-      messages: [
-        {
-          id: "m1",
-          sender: "dispatcher",
-          content: "Good morning! How's your day going?",
-          timestamp: "9:00 AM",
-          type: "text",
-        },
-        {
-          id: "m2",
-          sender: "driver",
-          content: "Morning! All good, ready for assignments",
-          timestamp: "9:05 AM",
-          type: "text",
-        },
-        {
-          id: "m3",
-          sender: "dispatcher",
-          content: "Your next assignment is ready",
-          timestamp: "9:15 AM",
-          type: "status_update",
-        },
-      ],
-    },
-    {
-      id: "c2",
-      dispatcherName: "Sarah Support",
-      lastMessage: "Please update your vehicle documents",
-      timestamp: "1 hour ago",
-      unread: 0,
-      messages: [
-        {
-          id: "m4",
-          sender: "dispatcher",
-          content: "Please update your vehicle documents",
-          timestamp: "8:00 AM",
-          type: "alert",
-        },
-      ],
-    },
-  ];
+const QUICK_MESSAGES = [
+  "Running late — 10 minutes",
+  "Vehicle breakdown — need assistance",
+  "Arrived at pickup location",
+  "Delivery complete — awaiting confirmation",
+];
 
-  const currentConversation = conversations.find((c) => c.id === selectedConversation);
+function ConversationView({ conv, onBack }: { conv: Conversation; onBack: () => void }) {
+  const colors = useColors();
+  const [text, setText] = useState("");
+  const scrollRef = useRef<ScrollView>(null);
 
-  const handleSendMessage = () => {
-    if (!messageText.trim() || !selectedConversation) return;
-
-    Alert.alert("Message Sent", "Your message has been sent to the dispatcher");
-    setMessageText("");
+  const send = () => {
+    if (!text.trim()) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Alert.alert("Sent", "Your message has been sent to dispatch.");
+    setText("");
   };
-
-  const handleEmergencyAlert = () => {
-    Alert.alert(
-      "Emergency Alert",
-      "Send an emergency alert to all dispatchers?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Send Alert",
-          onPress: () => {
-            Alert.alert("Alert Sent", "Emergency alert has been sent to all dispatchers");
-          },
-          style: "destructive",
-        },
-      ]
-    );
-  };
-
-  if (selectedConversation && currentConversation) {
-    return (
-      <ScreenContainer className="p-0">
-        <View className="flex-1">
-          {/* Chat Header */}
-          <View className="bg-primary px-6 py-4 flex-row justify-between items-center">
-            <Pressable onPress={() => setSelectedConversation(null)}>
-              <Text className="text-white text-lg">← Back</Text>
-            </Pressable>
-            <Text className="text-white text-lg font-bold">{currentConversation.dispatcherName}</Text>
-            <View className="w-6" />
-          </View>
-
-          {/* Messages */}
-          <ScrollView className="flex-1 px-6 py-4 gap-3">
-            {currentConversation.messages.map((msg) => (
-              <View
-                key={msg.id}
-                className={`flex-row ${msg.sender === "driver" ? "justify-end" : "justify-start"}`}
-              >
-                <View
-                  className={`max-w-xs px-4 py-3 rounded-lg ${
-                    msg.sender === "driver"
-                      ? "bg-primary rounded-br-none"
-                      : msg.type === "alert"
-                      ? "bg-red-100 dark:bg-red-900 rounded-bl-none"
-                      : msg.type === "status_update"
-                      ? "bg-blue-100 dark:bg-blue-900 rounded-bl-none"
-                      : "bg-surface rounded-bl-none"
-                  }`}
-                >
-                  <Text
-                    className={`${
-                      msg.sender === "driver"
-                        ? "text-white"
-                        : msg.type === "alert"
-                        ? "text-red-900 dark:text-red-100"
-                        : msg.type === "status_update"
-                        ? "text-blue-900 dark:text-blue-100"
-                        : "text-foreground"
-                    }`}
-                  >
-                    {msg.content}
-                  </Text>
-                  <Text
-                    className={`text-xs mt-1 ${
-                      msg.sender === "driver"
-                        ? "text-white opacity-70"
-                        : msg.type === "alert"
-                        ? "text-red-800 dark:text-red-200"
-                        : msg.type === "status_update"
-                        ? "text-blue-800 dark:text-blue-200"
-                        : "text-muted"
-                    }`}
-                  >
-                    {msg.timestamp}
-                  </Text>
-                </View>
-              </View>
-            ))}
-          </ScrollView>
-
-          {/* Message Input */}
-          <View className="px-6 py-4 border-t border-border gap-3">
-            <View className="flex-row gap-2 items-end">
-              <TextInput
-                placeholder="Type a message..."
-                placeholderTextColor="#9BA1A6"
-                value={messageText}
-                onChangeText={setMessageText}
-                multiline
-                className="flex-1 bg-surface border border-border rounded-lg px-4 py-3 text-foreground"
-              />
-              <Pressable
-                onPress={handleSendMessage}
-                disabled={!messageText.trim()}
-                style={({ pressed }) => [
-                  { transform: [{ scale: pressed && messageText.trim() ? 0.97 : 1 }] },
-                ]}
-              >
-                <View className="bg-primary rounded-lg px-4 py-3 items-center">
-                  <Text className="text-white font-bold">Send</Text>
-                </View>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </ScreenContainer>
-    );
-  }
 
   return (
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View className="bg-primary px-6 py-6">
-          <Text className="text-white text-2xl font-bold mb-2">Messages</Text>
-          <Text className="text-white text-sm opacity-80">Chat with your dispatcher</Text>
+    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+      {/* Chat header */}
+      <View className="bg-navy px-5 py-4 flex-row items-center gap-3">
+        <Pressable onPress={onBack} className="mr-1">
+          <Text className="text-white text-lg">←</Text>
+        </Pressable>
+        <View className="w-8 h-8 rounded-full bg-white/15 items-center justify-center">
+          <Text className="text-base">{conv.avatar}</Text>
         </View>
+        <Text className="text-white font-bold text-base flex-1">{conv.dispatcherName}</Text>
+        <View className="w-2 h-2 rounded-full bg-success" />
+      </View>
 
-        <View className="px-6 py-6 gap-6">
-          {/* Emergency Alert Button */}
-          <Pressable
-            onPress={handleEmergencyAlert}
-            style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.97 : 1 }] }]}
-          >
-            <View className="bg-error rounded-lg py-4 items-center border-2 border-error">
-              <Text className="text-base font-bold text-white">🚨 Emergency Alert</Text>
+      {/* Messages */}
+      <ScrollView
+        ref={scrollRef}
+        className="flex-1 bg-background"
+        contentContainerStyle={{ padding: 16, gap: 10 }}
+        onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+      >
+        {conv.messages.map((msg) => {
+          const isDriver = msg.sender === "driver";
+          const bubbleBg = isDriver
+            ? "bg-primary"
+            : msg.type === "alert"
+            ? "bg-error/15 border border-error/25"
+            : msg.type === "status_update"
+            ? "bg-primary/10 border border-primary/20"
+            : "bg-surface border border-border";
+          const textColor = isDriver ? "text-white" : "text-foreground";
+          return (
+            <View key={msg.id} className={`flex-row ${isDriver ? "justify-end" : "justify-start"}`}>
+              <View className={`max-w-[78%] px-4 py-2.5 rounded-2xl ${isDriver ? "rounded-br-md" : "rounded-bl-md"} ${bubbleBg}`}>
+                <Text className={`text-sm leading-5 ${textColor}`}>{msg.content}</Text>
+                <Text className={`text-[10px] mt-1 ${isDriver ? "text-white/60" : "text-muted"}`}>{msg.timestamp}</Text>
+              </View>
             </View>
-          </Pressable>
+          );
+        })}
+      </ScrollView>
 
-          {/* Quick Messages */}
-          <View className="bg-surface rounded-lg p-4 border border-border">
-            <Text className="text-lg font-semibold text-foreground mb-3">Quick Messages</Text>
-            <View className="gap-2">
-              {[
-                "Running late - 10 minutes",
-                "Vehicle breakdown - need assistance",
-                "Passenger issue - need guidance",
-                "Completed assignment early",
-              ].map((msg, idx) => (
-                <Pressable
-                  key={idx}
-                  onPress={() => {
-                    Alert.alert("Message Sent", `"${msg}" has been sent to dispatcher`);
-                  }}
-                  style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.98 : 1 }] }]}
-                >
-                  <View className="bg-primary/10 rounded-lg p-3 border border-primary/20">
-                    <Text className="text-sm text-foreground">{msg}</Text>
-                  </View>
-                </Pressable>
-              ))}
-            </View>
+      {/* Input */}
+      <View className="bg-surface border-t border-border px-4 py-3 flex-row gap-2 items-end">
+        <TextInput
+          value={text}
+          onChangeText={setText}
+          placeholder="Type a message…"
+          placeholderTextColor={colors.muted}
+          multiline
+          style={{ color: colors.foreground }}
+          className="flex-1 bg-background border border-border rounded-2xl px-4 py-2.5 text-sm max-h-24"
+        />
+        <Pressable
+          onPress={send}
+          disabled={!text.trim()}
+          style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.95 : 1 }], opacity: text.trim() ? 1 : 0.4 }]}
+        >
+          <View className="bg-primary w-10 h-10 rounded-2xl items-center justify-center">
+            <Text className="text-white text-base">↑</Text>
           </View>
+        </Pressable>
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
 
-          {/* Conversations */}
-          <View className="gap-3">
-            <Text className="text-lg font-semibold text-foreground">Conversations</Text>
-            {conversations.map((conv) => (
+export function MessagesContent() {
+  const colors = useColors();
+  const [selected, setSelected] = useState<string | null>(null);
+  const headerAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.spring(headerAnim, { toValue: 1, useNativeDriver: true, tension: 120, friction: 20 }).start();
+  }, []);
+
+  const conv = CONVERSATIONS.find(c => c.id === selected);
+  if (conv) return <ConversationView conv={conv} onBack={() => setSelected(null)} />;
+
+  return (
+    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+      <Animated.View
+        className="bg-navy px-6 pt-8 pb-6"
+        style={{ opacity: headerAnim, transform: [{ translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-16, 0] }) }] }}
+      >
+        <Text className="text-white text-2xl font-bold">Messages</Text>
+        <Text className="text-white/60 text-sm mt-1">Chat with dispatch</Text>
+      </Animated.View>
+
+      <View className="px-4 pt-4 gap-4">
+        {/* Emergency button */}
+        <Pressable
+          onPress={() =>
+            Alert.alert("Emergency Alert", "Send emergency alert to all dispatchers?", [
+              { text: "Cancel", style: "cancel" },
+              { text: "Send", style: "destructive", onPress: () => { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); Alert.alert("Sent", "Emergency alert sent to all dispatchers."); } },
+            ])
+          }
+          style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.97 : 1 }] }]}
+        >
+          <View className="bg-error/10 border-2 border-error/40 rounded-2xl py-4 flex-row items-center justify-center gap-2">
+            <Text className="text-xl">🚨</Text>
+            <Text className="text-error font-bold text-base">Emergency Alert</Text>
+          </View>
+        </Pressable>
+
+        {/* Quick messages */}
+        <View className="bg-surface rounded-2xl border border-border p-4">
+          <Text className="text-xs font-bold text-muted uppercase tracking-widest mb-3">Quick Messages</Text>
+          <View className="gap-2">
+            {QUICK_MESSAGES.map((msg, i) => (
               <Pressable
-                key={conv.id}
-                onPress={() => setSelectedConversation(conv.id)}
-                style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.98 : 1 }] }]}
+                key={i}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); Alert.alert("Sent", `"${msg}" sent to dispatch.`); }}
+                style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
               >
-                <View className="bg-surface rounded-lg p-4 border border-border flex-row justify-between items-start">
-                  <View className="flex-1">
-                    <View className="flex-row items-center gap-2 mb-2">
-                      <Text className="text-base font-semibold text-foreground">
-                        {conv.dispatcherName}
-                      </Text>
-                      {conv.unread > 0 && (
-                        <View className="bg-error rounded-full px-2 py-1">
-                          <Text className="text-white text-xs font-bold">{conv.unread}</Text>
-                        </View>
-                      )}
-                    </View>
-                    <Text className="text-sm text-muted">{conv.lastMessage}</Text>
-                    <Text className="text-xs text-muted mt-1">{conv.timestamp}</Text>
-                  </View>
-                  <Text className="text-lg">→</Text>
+                <View className="bg-background border border-border rounded-xl px-4 py-3 flex-row items-center justify-between">
+                  <Text className="text-sm text-foreground flex-1">{msg}</Text>
+                  <Text className="text-muted text-sm ml-2">↑</Text>
                 </View>
               </Pressable>
             ))}
           </View>
         </View>
-      </ScrollView>
+
+        {/* Conversations */}
+        <Text className="text-xs font-bold text-muted uppercase tracking-widest">Conversations</Text>
+        {CONVERSATIONS.map((c, i) => (
+          <Pressable
+            key={c.id}
+            onPress={() => setSelected(c.id)}
+            style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.98 : 1 }] }]}
+          >
+            <View className="bg-surface rounded-2xl border border-border p-4 flex-row items-center gap-3">
+              <View className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 items-center justify-center">
+                <Text className="text-xl">{c.avatar}</Text>
+              </View>
+              <View className="flex-1">
+                <View className="flex-row justify-between items-center mb-0.5">
+                  <Text className="text-sm font-bold text-foreground">{c.dispatcherName}</Text>
+                  <Text className="text-[10px] text-muted">{c.timestamp}</Text>
+                </View>
+                <Text className="text-xs text-muted" numberOfLines={1}>{c.lastMessage}</Text>
+              </View>
+              {c.unread > 0 && (
+                <View className="bg-error rounded-full min-w-5 h-5 items-center justify-center px-1">
+                  <Text className="text-white text-[10px] font-bold">{c.unread}</Text>
+                </View>
+              )}
+            </View>
+          </Pressable>
+        ))}
+      </View>
+    </ScrollView>
   );
 }
 
 export default function MessagesScreen() {
-  return (
-    <ScreenContainer className="p-0">
-      <MessagesContent />
-    </ScreenContainer>
-  );
+  return <View style={{ flex: 1 }}><MessagesContent /></View>;
 }

@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { ScrollView, Text, View, Pressable, Alert, ActivityIndicator } from "react-native";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { ScrollView, Text, View, Pressable, Alert, ActivityIndicator, Animated } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { driverApi, paymentsApi } from "@/lib/api-client";
 import { useColors } from "@/hooks/use-colors";
+import * as Haptics from "expo-haptics";
 
 interface CommissionEntry {
   _id: string;
@@ -13,12 +14,48 @@ interface CommissionEntry {
   status?: string;
 }
 
+function EntryRow({ entry, index }: { entry: CommissionEntry; index: number }) {
+  const anim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.spring(anim, {
+      toValue: 1, useNativeDriver: true, tension: 90, friction: 18, delay: index * 50,
+    }).start();
+  }, []);
+  const date = new Date(entry.createdAt);
+  const dateStr = date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const timeStr = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const statusColor = entry.status === "PAID" ? "text-success" : "text-warning";
+  return (
+    <Animated.View style={{ opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }}>
+      <View className="bg-surface rounded-2xl border border-border p-4 flex-row items-center">
+        <View className="w-10 h-10 rounded-xl bg-success/10 border border-success/20 items-center justify-center mr-3">
+          <Text className="text-base">💰</Text>
+        </View>
+        <View className="flex-1">
+          <Text className="text-sm font-bold text-foreground">Trip Commission</Text>
+          <Text className="text-xs text-muted mt-0.5">{dateStr} · {timeStr}</Text>
+        </View>
+        <View className="items-end">
+          <Text className="text-base font-bold text-success">+ETB {entry.amount?.toLocaleString() ?? "0"}</Text>
+          {entry.status && <Text className={`text-[10px] font-bold uppercase mt-0.5 ${statusColor}`}>{entry.status}</Text>}
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
+
 export function EarningsContent() {
   const colors = useColors();
   const [totalCommission, setTotalCommission] = useState(0);
+  const [available, setAvailable] = useState(0);
   const [commissionHistory, setCommissionHistory] = useState<CommissionEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  const headerAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.spring(headerAnim, { toValue: 1, useNativeDriver: true, tension: 120, friction: 20 }).start();
+  }, []);
 
   const fetchEarnings = useCallback(async () => {
     try {
@@ -26,51 +63,44 @@ export function EarningsContent() {
         driverApi.getCommission(),
         driverApi.getCommissionHistory(),
       ]);
-
       if (commissionRes.status === "fulfilled") {
-        const data = commissionRes.value.data;
-        setTotalCommission(data.data?.totalCommission ?? data.data?.total ?? 0);
+        const d = commissionRes.value.data?.data;
+        setTotalCommission(d?.totalCommission ?? 0);
+        setAvailable(d?.available ?? d?.totalCommission ?? 0);
       }
-
       if (historyRes.status === "fulfilled") {
-        const data = historyRes.value.data;
-        setCommissionHistory(data.data?.commissions || data.data || []);
+        const d = historyRes.value.data?.data;
+        setCommissionHistory(d?.commissions ?? d ?? []);
       }
-    } catch (error) {
-      console.error("Error fetching earnings:", error);
-    } finally {
-      setIsLoading(false);
-    }
+    } catch {}
+    finally { setIsLoading(false); }
   }, []);
 
-  useEffect(() => {
-    fetchEarnings();
-  }, [fetchEarnings]);
+  useEffect(() => { fetchEarnings(); }, [fetchEarnings]);
 
   const handleRequestPayout = async () => {
-    if (totalCommission <= 0) {
-      Alert.alert("No Balance", "You don't have any earnings to withdraw.");
+    if (available <= 0) {
+      Alert.alert("No Balance", "You don't have any available earnings to withdraw.");
       return;
     }
-
     Alert.alert(
       "Request Payout",
-      `Request a payout of ETB ${totalCommission.toLocaleString()}?`,
+      `Withdraw ETB ${available.toLocaleString()} via Chapa?`,
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Request",
+          text: "Withdraw",
           onPress: async () => {
             setIsProcessing(true);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             try {
-              await paymentsApi.initialize("payout", totalCommission);
-              Alert.alert("Success", "Payout request submitted! You'll receive it shortly via Chapa.");
-              await fetchEarnings(); // refresh
-            } catch (error) {
-              Alert.alert("Error", error instanceof Error ? error.message : "Payout request failed.");
-            } finally {
-              setIsProcessing(false);
-            }
+              await paymentsApi.initialize("payout", available);
+              Alert.alert("✅ Submitted", "Payout request sent. You'll receive it via Chapa shortly.");
+              fetchEarnings();
+            } catch (e) {
+              Alert.alert("Error", e instanceof Error ? e.message : "Payout request failed.");
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            } finally { setIsProcessing(false); }
           },
         },
       ]
@@ -78,93 +108,74 @@ export function EarningsContent() {
   };
 
   return (
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View className="bg-primary px-6 py-6">
-          <Text className="text-white text-2xl font-bold mb-2">Earnings</Text>
-          <Text className="text-white text-sm opacity-80">Manage your money</Text>
-        </View>
-
-        <View className="px-6 py-6 gap-6">
-          {/* Balance Card */}
-          <View className="bg-green-50 dark:bg-green-950 rounded-lg p-6 border border-green-200 dark:border-green-800">
-            <Text className="text-sm text-green-600 dark:text-green-300 font-semibold mb-1">
-              Available Balance
-            </Text>
-            {isLoading ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : (
-              <Text className="text-4xl font-bold text-green-700 dark:text-green-100">
-                ETB {totalCommission.toLocaleString()}
-              </Text>
-            )}
+    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+      {/* Navy header */}
+      <Animated.View
+        className="bg-navy px-6 pt-8 pb-8"
+        style={{ opacity: headerAnim, transform: [{ translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-16, 0] }) }] }}
+      >
+        <Text className="text-white/60 text-xs font-bold uppercase tracking-widest mb-1">Total Earned</Text>
+        {isLoading
+          ? <ActivityIndicator color="white" style={{ alignSelf: "flex-start", marginVertical: 8 }} />
+          : <Text className="text-white text-4xl font-bold">ETB {totalCommission.toLocaleString()}</Text>
+        }
+        <View className="flex-row gap-4 mt-5">
+          <View className="bg-white/10 rounded-2xl px-4 py-3 flex-1">
+            <Text className="text-white/60 text-[10px] uppercase tracking-widest">Available</Text>
+            <Text className="text-success text-xl font-bold mt-0.5">ETB {available.toLocaleString()}</Text>
           </View>
-
-          {/* Payout Button */}
-          <Pressable
-            onPress={handleRequestPayout}
-            disabled={isProcessing || isLoading}
-            style={({ pressed }) => [
-              {
-                transform: [{ scale: pressed && !isProcessing ? 0.97 : 1 }],
-                opacity: isProcessing ? 0.6 : 1,
-              },
-            ]}
-          >
-            <View className="bg-primary rounded-lg py-4 items-center">
-              <Text className="text-base font-semibold text-white">
-                {isProcessing ? "Processing..." : "💳 Request Payout via Chapa"}
-              </Text>
-            </View>
-          </Pressable>
-
-          {/* Commission History */}
-          <View>
-            <Text className="text-lg font-semibold text-foreground mb-3">
-              Commission History
-            </Text>
-            {isLoading ? (
-              <View className="py-8 items-center">
-                <ActivityIndicator size="large" color={colors.primary} />
-              </View>
-            ) : commissionHistory.length === 0 ? (
-              <View className="bg-surface rounded-lg p-6 border border-border items-center">
-                <Text className="text-3xl mb-2">📊</Text>
-                <Text className="text-muted text-center">No commission history yet. Complete trips to earn!</Text>
-              </View>
-            ) : (
-              commissionHistory.map((entry) => (
-                <View
-                  key={entry._id}
-                  className="bg-surface rounded-lg p-4 border border-border mb-3"
-                >
-                  <View className="flex-row justify-between items-center">
-                    <View className="flex-1">
-                      <Text className="text-sm font-semibold text-foreground">
-                        Trip Commission
-                      </Text>
-                      <Text className="text-xs text-muted mt-1">
-                        {new Date(entry.createdAt).toLocaleDateString()} at{" "}
-                        {new Date(entry.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </Text>
-                    </View>
-                    <Text className="text-lg font-bold text-success">
-                      +ETB {entry.amount?.toLocaleString() ?? "0"}
-                    </Text>
-                  </View>
-                </View>
-              ))
-            )}
+          <View className="bg-white/10 rounded-2xl px-4 py-3 flex-1">
+            <Text className="text-white/60 text-[10px] uppercase tracking-widest">Trips</Text>
+            <Text className="text-white text-xl font-bold mt-0.5">{commissionHistory.length}</Text>
           </View>
         </View>
-      </ScrollView>
+      </Animated.View>
+
+      <View className="px-4 pt-5 gap-4">
+        {/* Payout button */}
+        <Pressable
+          onPress={handleRequestPayout}
+          disabled={isProcessing || isLoading || available <= 0}
+          style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.97 : 1 }], opacity: (isProcessing || available <= 0) ? 0.5 : 1 }]}
+        >
+          <View className="bg-primary rounded-2xl py-4 flex-row items-center justify-center gap-2">
+            <Text className="text-xl">💳</Text>
+            <Text className="text-white font-bold text-base">
+              {isProcessing ? "Processing…" : "Withdraw via Chapa"}
+            </Text>
+          </View>
+        </Pressable>
+
+        {/* Payout info note */}
+        <View className="bg-primary/8 border border-primary/20 rounded-2xl px-4 py-3 flex-row items-center gap-3">
+          <Text className="text-base">📅</Text>
+          <Text className="text-foreground text-xs leading-5 flex-1">
+            Payouts are processed every Friday. Funds arrive within 1–2 business days via Chapa.
+          </Text>
+        </View>
+
+        {/* History */}
+        <Text className="text-xs font-bold text-muted uppercase tracking-widest mt-2">Commission History</Text>
+        {isLoading ? (
+          <View className="py-10 items-center">
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        ) : commissionHistory.length === 0 ? (
+          <View className="bg-surface rounded-2xl border border-border p-10 items-center">
+            <Text className="text-4xl mb-3">📊</Text>
+            <Text className="text-foreground font-bold text-base mb-1">No Earnings Yet</Text>
+            <Text className="text-muted text-sm text-center">Complete trips to start earning commissions.</Text>
+          </View>
+        ) : (
+          <View className="gap-2">
+            {commissionHistory.map((entry, i) => <EntryRow key={entry._id} entry={entry} index={i} />)}
+          </View>
+        )}
+      </View>
+    </ScrollView>
   );
 }
 
 export default function EarningsScreen() {
-  return (
-    <ScreenContainer className="p-0">
-      <EarningsContent />
-    </ScreenContainer>
-  );
+  return <ScreenContainer className="p-0"><EarningsContent /></ScreenContainer>;
 }
