@@ -71,6 +71,26 @@ function AnimatedCard({ children, delay = 0, style }: { children: React.ReactNod
   );
 }
 
+interface Coord { latitude: number; longitude: number }
+
+async function fetchOsrmRoute(
+  fromLng: number, fromLat: number,
+  toLng: number, toLat: number
+): Promise<Coord[]> {
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson`;
+    const res = await fetch(url);
+    const json = await res.json();
+    const coords: [number, number][] = json.routes?.[0]?.geometry?.coordinates ?? [];
+    return coords.map(([lng, lat]) => ({ latitude: lat, longitude: lng }));
+  } catch {
+    return [
+      { latitude: fromLat, longitude: fromLng },
+      { latitude: toLat, longitude: toLng },
+    ];
+  }
+}
+
 export function ActiveTrip({ assignment, isLoading, onRefresh }: ActiveTripProps) {
   const colors = useColors();
   const [isVerificationModalVisible, setIsVerificationModalVisible] = useState(false);
@@ -78,6 +98,7 @@ export function ActiveTrip({ assignment, isLoading, onRefresh }: ActiveTripProps
   const [milestoneNote, setMilestoneNote] = useState("");
   const [showNoteInput, setShowNoteInput] = useState(false);
   const [geofenceWarning, setGeofenceWarning] = useState<string | null>(null);
+  const [routeCoords, setRouteCoords] = useState<Coord[]>([]);
   const geofencePulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -92,6 +113,17 @@ export function ActiveTrip({ assignment, isLoading, onRefresh }: ActiveTripProps
       return () => pulse.stop();
     }
   }, [geofenceWarning]);
+
+  // Fetch OSRM route when assignment changes
+  useEffect(() => {
+    if (!assignment) { setRouteCoords([]); return; }
+    const p = assignment.pickupLocation;
+    const d = assignment.deliveryLocation;
+    if (p?.latitude && p?.longitude && d?.latitude && d?.longitude) {
+      fetchOsrmRoute(p.longitude, p.latitude, d.longitude, d.latitude)
+        .then(setRouteCoords);
+    }
+  }, [assignment?._id]);
 
   // Stream GPS location and check geofences every 30 seconds during active trip
   useEffect(() => {
@@ -192,7 +224,11 @@ export function ActiveTrip({ assignment, isLoading, onRefresh }: ActiveTripProps
           setIsVerificationModalVisible(true);
           return;
         default:
-          await driverApi.updateMilestone(assignment._id, nextStep.key);
+          await driverApi.updateMilestone(assignment._id, nextStep.key, {
+            longitude: loc?.coords.longitude,
+            latitude: loc?.coords.latitude,
+            note: milestoneNote.trim() || undefined,
+          });
       }
       if (loc) {
         await driverApi.streamLocation(
@@ -287,15 +323,11 @@ export function ActiveTrip({ assignment, isLoading, onRefresh }: ActiveTripProps
                   pinColor="#21C45D"
                 />
               )}
-              {assignment.pickupLocation?.latitude && assignment.deliveryLocation?.latitude && (
+              {routeCoords.length > 1 && (
                 <Polyline
-                  coordinates={[
-                    { latitude: assignment.pickupLocation.latitude!, longitude: assignment.pickupLocation.longitude! },
-                    { latitude: assignment.deliveryLocation.latitude!, longitude: assignment.deliveryLocation.longitude! },
-                  ]}
+                  coordinates={routeCoords}
                   strokeColor={colors.primary}
-                  strokeWidth={3}
-                  lineDashPattern={[6, 4]}
+                  strokeWidth={4}
                 />
               )}
             </MapView>

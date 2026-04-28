@@ -1,295 +1,277 @@
-import React, { useState, useEffect } from "react";
-import { View, Text, Pressable, ScrollView, Alert } from "react-native";
-import { ScreenContainer } from "@/components/screen-container";
+import React, { useState, useEffect, useRef } from "react";
+import {
+  View, Text, Pressable, ActivityIndicator, Platform,
+} from "react-native";
+import MapView, { Marker, Polyline, Circle, PROVIDER_GOOGLE } from "react-native-maps";
 import * as Location from "expo-location";
 import * as Linking from "expo-linking";
+import { useColors } from "@/hooks/use-colors";
+import { driverApi, geofencesApi } from "@/lib/api-client";
+import { ScreenContainer } from "@/components/screen-container";
 
-interface RoutePoint {
-  latitude: number;
-  longitude: number;
+interface Coord { latitude: number; longitude: number }
+
+interface ActiveAssignment {
+  _id: string;
   title: string;
-  description: string;
+  status: string;
+  pickupLocation?: { address?: string; city?: string; latitude?: number; longitude?: number };
+  deliveryLocation?: { address?: string; city?: string; latitude?: number; longitude?: number };
+  pricing?: { proposedBudget?: number; currency?: string };
 }
 
-interface LocationData {
-  latitude: number;
-  longitude: number;
-  speed: number | null;
-  heading: number | null;
-  accuracy: number | null;
+interface Geofence {
+  _id: string;
+  name: string;
+  type: "CIRCLE" | "POLYGON";
+  center?: { coordinates: [number, number] };
+  radius?: number;
+  isRestricted?: boolean;
+}
+
+async function fetchOsrmRoute(
+  fromLng: number, fromLat: number,
+  toLng: number, toLat: number
+): Promise<Coord[]> {
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson`;
+    const res = await fetch(url);
+    const json = await res.json();
+    const coords: [number, number][] = json.routes?.[0]?.geometry?.coordinates ?? [];
+    return coords.map(([lng, lat]) => ({ latitude: lat, longitude: lng }));
+  } catch {
+    return [
+      { latitude: fromLat, longitude: fromLng },
+      { latitude: toLat, longitude: toLng },
+    ];
+  }
 }
 
 export function MapContent() {
-  const [location, setLocation] = useState<LocationData | null>(null);
-  const [selectedRoute, setSelectedRoute] = useState(0);
-  const [distance, setDistance] = useState("12.5 km");
-  const [eta, setEta] = useState("45 minutes");
-  const [isTracking, setIsTracking] = useState(false);
-  const [permissionGranted, setPermissionGranted] = useState(false);
+  const colors = useColors();
+  const mapRef = useRef<MapView>(null);
 
-  // Mock route data
-  const routes: RoutePoint[][] = [
-    [
-      { latitude: 40.7128, longitude: -74.006, title: "Start Point", description: "Downtown Station" },
-      { latitude: 40.758, longitude: -73.9855, title: "Destination", description: "Times Square" },
-    ],
-    [
-      { latitude: 40.7489, longitude: -73.968, title: "Start Point", description: "Central Park" },
-      { latitude: 40.7614, longitude: -73.9776, title: "Destination", description: "Grand Central" },
-    ],
-  ];
+  const [currentLocation, setCurrentLocation] = useState<Coord | null>(null);
+  const [permissionGranted, setPermissionGranted] = useState(false);
+  const [activeAssignment, setActiveAssignment] = useState<ActiveAssignment | null>(null);
+  const [routeCoords, setRouteCoords] = useState<Coord[]>([]);
+  const [geofences, setGeofences] = useState<Geofence[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRouteFetching, setIsRouteFetching] = useState(false);
+  const locationSubRef = useRef<Location.LocationSubscription | null>(null);
 
   useEffect(() => {
-    requestLocationPermission();
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") { setIsLoading(false); return; }
+      setPermissionGranted(true);
+
+      const initial = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      setCurrentLocation({ latitude: initial.coords.latitude, longitude: initial.coords.longitude });
+
+      locationSubRef.current = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.Balanced, timeInterval: 5000, distanceInterval: 20 },
+        (loc) => setCurrentLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude })
+      );
+    })();
+    return () => locationSubRef.current?.remove();
   }, []);
 
-  const requestLocationPermission = async () => {
+  useEffect(() => { fetchAssignment(); }, []);
+
+  const fetchAssignment = async () => {
+    setIsLoading(true);
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === "granted") {
-        setPermissionGranted(true);
-        // Get initial location
-        const initialLocation = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High,
-        });
-        updateLocationState(initialLocation);
-      } else {
-        Alert.alert("Permission Denied", "Location permission is required to show your position on the map");
-        setPermissionGranted(false);
-      }
-    } catch (error) {
-      console.error("Error requesting location permission:", error);
-    }
-  };
+      const res = await driverApi.getAssignments();
+      const assignments: ActiveAssignment[] = (res.data as any)?.data?.assignments ?? [];
+      const active = assignments.find((a) =>
+        !["DELIVERED", "CANCELLED", "COMPLETED"].includes(a.status?.toUpperCase())
+      ) ?? null;
+      setActiveAssignment(active);
 
-  const updateLocationState = (loc: Location.LocationObject) => {
-    setLocation({
-      latitude: loc.coords.latitude,
-      longitude: loc.coords.longitude,
-      speed: loc.coords.speed,
-      heading: loc.coords.heading,
-      accuracy: loc.coords.accuracy,
-    });
-  };
+      if (active) {
+        try {
+          const geoRes = await geofencesApi.getByTrip(active._id);
+          setGeofences((geoRes.data as any)?.data?.geofences ?? []);
+        } catch {}
 
-  const startLiveTracking = async () => {
-    if (!permissionGranted) {
-      await requestLocationPermission();
-      return;
-    }
-
-    setIsTracking(true);
-    try {
-      // Subscribe to location updates
-      const subscription = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.High,
-          timeInterval: 1000, // Update every 1 second
-          distanceInterval: 10, // Or every 10 meters
-        },
-        (loc) => {
-          updateLocationState(loc);
+        const p = active.pickupLocation;
+        const d = active.deliveryLocation;
+        if (p?.latitude && p?.longitude && d?.latitude && d?.longitude) {
+          setIsRouteFetching(true);
+          const route = await fetchOsrmRoute(p.longitude, p.latitude, d.longitude, d.latitude);
+          setRouteCoords(route);
+          setIsRouteFetching(false);
+          if (mapRef.current && route.length > 1) {
+            mapRef.current.fitToCoordinates(route, {
+              edgePadding: { top: 60, right: 60, bottom: 220, left: 60 },
+              animated: true,
+            });
+          }
         }
-      );
-
-      // Store subscription for cleanup
-      return () => subscription.remove();
-    } catch (error) {
-      console.error("Error starting location tracking:", error);
-      setIsTracking(false);
+      }
+    } catch (e) {
+      console.error("Map fetch error", e);
+    } finally {
+      setIsLoading(false);
     }
-  };
-
-  const stopLiveTracking = () => {
-    setIsTracking(false);
   };
 
   const handleNavigate = () => {
-    const route = routes[selectedRoute];
-    const origin = `${route[0].latitude},${route[0].longitude}`;
-    const destination = `${route[route.length - 1].latitude},${route[route.length - 1].longitude}`;
-    const url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}`;
-    Linking.openURL(url);
+    if (!activeAssignment) return;
+    const dest = activeAssignment.pickupLocation?.latitude
+      ? activeAssignment.pickupLocation
+      : activeAssignment.deliveryLocation;
+    if (!dest?.latitude) return;
+    const url = Platform.select({
+      ios: `maps://app?daddr=${dest.latitude},${dest.longitude}`,
+      android: `google.navigation:q=${dest.latitude},${dest.longitude}`,
+      default: `https://www.google.com/maps/dir/?api=1&destination=${dest.latitude},${dest.longitude}`,
+    });
+    Linking.openURL(url!);
   };
 
-  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371;
-    const dLat = ((lat2 - lat1) * Math.PI) / 180;
-    const dLon = ((lon2 - lon1) * Math.PI) / 180;
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos((lat1 * Math.PI) / 180) *
-        Math.cos((lat2 * Math.PI) / 180) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return (R * c).toFixed(1);
+  const recenter = () => {
+    if (currentLocation && mapRef.current) {
+      mapRef.current.animateToRegion({ ...currentLocation, latitudeDelta: 0.05, longitudeDelta: 0.05 }, 600);
+    }
   };
 
-  const currentRoute = routes[selectedRoute];
-  const dist = calculateDistance(
-    currentRoute[0].latitude,
-    currentRoute[0].longitude,
-    currentRoute[1].latitude,
-    currentRoute[1].longitude
-  );
+  const initialRegion = currentLocation
+    ? { ...currentLocation, latitudeDelta: 0.08, longitudeDelta: 0.08 }
+    : { latitude: 9.03, longitude: 38.74, latitudeDelta: 0.5, longitudeDelta: 0.5 };
 
   return (
-      <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
-        {/* Map Preview */}
-        <View className="bg-surface border-b border-border">
-          <View className="w-full h-64 bg-gradient-to-b from-blue-100 to-blue-50 dark:from-blue-900 dark:to-blue-800 items-center justify-center relative">
-            {/* Map placeholder with route visualization */}
-            <View className="absolute inset-0 items-center justify-center">
-              <Text className="text-muted text-sm mb-4">📍 Route Map Preview</Text>
-              
-              {/* Route info */}
-              <View className="bg-white dark:bg-surface rounded-lg p-4 shadow-sm">
-                <Text className="text-foreground font-semibold mb-2">
-                  {currentRoute[0].title} → {currentRoute[1].title}
-                </Text>
-                <Text className="text-muted text-xs">
-                  {currentRoute[0].description} to {currentRoute[1].description}
-                </Text>
-              </View>
-            </View>
-
-            {/* Live tracking indicator */}
-            {isTracking && (
-              <View className="absolute top-4 right-4 bg-red-500 rounded-full px-3 py-1 flex-row items-center gap-2">
-                <View className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                <Text className="text-white text-xs font-semibold">LIVE</Text>
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* Live Location Display */}
-        {location && (
-          <View className="px-4 py-4 bg-blue-50 dark:bg-blue-900/20 border-b border-border">
-            <Text className="text-sm font-semibold text-foreground mb-3">📍 Your Current Location</Text>
-            <View className="bg-white dark:bg-surface rounded-lg p-4 gap-2">
-              <View className="flex-row justify-between items-center">
-                <Text className="text-muted text-sm">Latitude</Text>
-                <Text className="text-foreground font-mono text-sm">{location.latitude.toFixed(6)}</Text>
-              </View>
-              <View className="flex-row justify-between items-center">
-                <Text className="text-muted text-sm">Longitude</Text>
-                <Text className="text-foreground font-mono text-sm">{location.longitude.toFixed(6)}</Text>
-              </View>
-              {location.speed !== null && (
-                <View className="flex-row justify-between items-center">
-                  <Text className="text-muted text-sm">Speed</Text>
-                  <Text className="text-foreground font-mono text-sm">
-                    {(location.speed * 3.6).toFixed(1)} km/h
-                  </Text>
-                </View>
-              )}
-              {location.heading !== null && (
-                <View className="flex-row justify-between items-center">
-                  <Text className="text-muted text-sm">Heading</Text>
-                  <Text className="text-foreground font-mono text-sm">{location.heading.toFixed(0)}°</Text>
-                </View>
-              )}
-              {location.accuracy !== null && (
-                <View className="flex-row justify-between items-center">
-                  <Text className="text-muted text-sm">Accuracy</Text>
-                  <Text className="text-foreground font-mono text-sm">±{location.accuracy.toFixed(1)}m</Text>
-                </View>
-              )}
-            </View>
-          </View>
+    <View className="flex-1">
+      <MapView
+        ref={mapRef}
+        provider={PROVIDER_GOOGLE}
+        style={{ flex: 1 }}
+        initialRegion={initialRegion}
+        showsUserLocation={permissionGranted}
+        showsMyLocationButton={false}
+        showsCompass={false}
+        toolbarEnabled={false}
+      >
+        {routeCoords.length > 1 && (
+          <Polyline coordinates={routeCoords} strokeColor={colors.primary} strokeWidth={4} />
         )}
+        {activeAssignment?.pickupLocation?.latitude && (
+          <Marker
+            coordinate={{
+              latitude: activeAssignment.pickupLocation.latitude!,
+              longitude: activeAssignment.pickupLocation.longitude!,
+            }}
+            title="Pickup"
+            description={activeAssignment.pickupLocation.city || activeAssignment.pickupLocation.address}
+            pinColor="#3B82F6"
+          />
+        )}
+        {activeAssignment?.deliveryLocation?.latitude && (
+          <Marker
+            coordinate={{
+              latitude: activeAssignment.deliveryLocation.latitude!,
+              longitude: activeAssignment.deliveryLocation.longitude!,
+            }}
+            title="Delivery"
+            description={activeAssignment.deliveryLocation.city || activeAssignment.deliveryLocation.address}
+            pinColor="#21C45D"
+          />
+        )}
+        {geofences.map((gf) => {
+          if (gf.type === "CIRCLE" && gf.center?.coordinates && gf.radius) {
+            const [lng, lat] = gf.center.coordinates;
+            return (
+              <Circle
+                key={gf._id}
+                center={{ latitude: lat, longitude: lng }}
+                radius={gf.radius}
+                strokeColor={gf.isRestricted ? "#EE4343" : "#F68E27"}
+                fillColor={gf.isRestricted ? "rgba(238,67,67,0.12)" : "rgba(246,142,39,0.10)"}
+                strokeWidth={2}
+              />
+            );
+          }
+          return null;
+        })}
+      </MapView>
 
-        {/* Live Tracking Controls */}
-        <View className="px-4 py-4 gap-3">
-          <Pressable
-            onPress={isTracking ? stopLiveTracking : startLiveTracking}
-            style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.97 : 1 }] }]}
-          >
-            <View className={`rounded-lg py-3 items-center ${isTracking ? "bg-red-500" : "bg-primary"}`}>
-              <Text className="text-white font-bold">
-                {isTracking ? "🛑 Stop Live Tracking" : "▶️ Start Live Tracking"}
-              </Text>
-            </View>
-          </Pressable>
-
-          {!permissionGranted && (
-            <View className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-              <Text className="text-yellow-700 text-xs">
-                ⚠️ Location permission required. Tap "Start Live Tracking" to enable.
-              </Text>
-            </View>
-          )}
+      {isLoading && (
+        <View className="absolute inset-0 items-center justify-center bg-background/60">
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
+      )}
 
-        {/* Route Selection */}
-        <View className="px-4 py-4 gap-3">
-          <Text className="text-lg font-bold text-foreground">Select Route</Text>
-          {routes.map((route, index) => (
+      {/* Top right controls */}
+      <View className="absolute top-3 right-3 gap-2">
+        <Pressable
+          onPress={fetchAssignment}
+          className="bg-surface border border-border rounded-xl w-10 h-10 items-center justify-center shadow-sm"
+          style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+        >
+          <Text>🔄</Text>
+        </Pressable>
+        <Pressable
+          onPress={recenter}
+          className="bg-surface border border-border rounded-xl w-10 h-10 items-center justify-center shadow-sm"
+          style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+        >
+          <Text>📍</Text>
+        </Pressable>
+      </View>
+
+      {isRouteFetching && (
+        <View className="absolute top-3 left-3 bg-surface border border-border rounded-xl px-3 py-2 flex-row items-center gap-2 shadow-sm">
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text className="text-xs text-muted font-medium">Calculating route…</Text>
+        </View>
+      )}
+
+      {/* Bottom panel */}
+      <View className="absolute bottom-0 left-0 right-0 bg-surface border-t border-border rounded-t-3xl px-5 pt-4 pb-8 shadow-lg">
+        {!permissionGranted ? (
+          <View className="items-center py-2">
+            <Text className="text-sm font-bold text-error mb-1">Location Permission Required</Text>
+            <Text className="text-xs text-muted text-center">Enable location access to use the map</Text>
+          </View>
+        ) : activeAssignment ? (
+          <>
+            <View className="flex-row justify-between items-start mb-3">
+              <View className="flex-1 pr-4">
+                <Text className="text-xs font-bold text-muted uppercase tracking-widest mb-0.5">Active Trip</Text>
+                <Text className="text-sm font-bold text-foreground" numberOfLines={1}>{activeAssignment.title}</Text>
+                <View className="flex-row gap-3 mt-1">
+                  {activeAssignment.pickupLocation?.city && (
+                    <Text className="text-xs text-muted">🔵 {activeAssignment.pickupLocation.city}</Text>
+                  )}
+                  {activeAssignment.deliveryLocation?.city && (
+                    <Text className="text-xs text-muted">🟢 {activeAssignment.deliveryLocation.city}</Text>
+                  )}
+                </View>
+              </View>
+              <View className="bg-primary/15 border border-primary/30 px-3 py-1 rounded-xl">
+                <Text className="text-primary text-xs font-bold">{activeAssignment.status}</Text>
+              </View>
+            </View>
             <Pressable
-              key={index}
-              onPress={() => setSelectedRoute(index)}
+              onPress={handleNavigate}
+              className="bg-primary rounded-2xl py-3.5 flex-row items-center justify-center gap-2"
               style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.97 : 1 }] }]}
             >
-              <View
-                className={`rounded-lg p-4 border-2 ${
-                  selectedRoute === index
-                    ? "bg-primary/10 border-primary"
-                    : "bg-surface border-border"
-                }`}
-              >
-                <View className="flex-row justify-between items-start mb-2">
-                  <Text className="text-foreground font-semibold flex-1">
-                    Route {index + 1}: {route[0].title}
-                  </Text>
-                  {selectedRoute === index && <Text className="text-primary">✓</Text>}
-                </View>
-                <Text className="text-muted text-sm mb-3">
-                  {route[0].description} → {route[1].description}
-                </Text>
-                <View className="flex-row justify-between text-xs text-muted">
-                  <Text>📏 {dist} km</Text>
-                  <Text>⏱️ ~45 min</Text>
-                </View>
-              </View>
+              <Text className="text-lg">🧭</Text>
+              <Text className="text-white font-bold">Open Navigation</Text>
             </Pressable>
-          ))}
-        </View>
-
-        {/* Route Details */}
-        <View className="px-4 py-4 gap-3">
-          <Text className="text-lg font-bold text-foreground">Route Details</Text>
-          <View className="bg-surface rounded-lg p-4 gap-3 border border-border">
-            <View className="flex-row justify-between items-center">
-              <Text className="text-muted text-sm">Distance</Text>
-              <Text className="text-foreground font-semibold">{dist} km</Text>
-            </View>
-            <View className="flex-row justify-between items-center">
-              <Text className="text-muted text-sm">Estimated Time</Text>
-              <Text className="text-foreground font-semibold">~45 minutes</Text>
-            </View>
-            <View className="flex-row justify-between items-center">
-              <Text className="text-muted text-sm">Route Type</Text>
-              <Text className="text-foreground font-semibold">Standard</Text>
-            </View>
+          </>
+        ) : (
+          <View className="items-center py-2">
+            <Text className="text-base font-bold text-foreground mb-1">No Active Trip</Text>
+            <Text className="text-xs text-muted text-center">
+              Accept an assignment in Orders to see your route here.
+            </Text>
           </View>
-        </View>
-
-        {/* Navigation Button */}
-        <View className="px-4 py-4">
-          <Pressable
-            onPress={handleNavigate}
-            style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.97 : 1 }] }]}
-          >
-            <View className="bg-primary rounded-lg py-4 items-center">
-              <Text className="text-white font-bold text-lg">🗺️ Open in Google Maps</Text>
-            </View>
-          </Pressable>
-        </View>
-
-        <View className="h-6" />
-      </ScrollView>
+        )}
+      </View>
+    </View>
   );
 }
 

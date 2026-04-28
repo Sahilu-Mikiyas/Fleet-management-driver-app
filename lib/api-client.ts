@@ -315,8 +315,21 @@ export const driverApi = {
   verifyOtp: (tripId: string, otp: string) =>
     apiClient.post(`/driver/trips/${tripId}/verify-otp`, { otp }),
 
-  updateMilestone: (tripId: string, milestone: string) =>
-    apiClient.put(`/driver/trips/${tripId}/milestone`, { milestone }),
+  updateMilestone: (
+    tripId: string,
+    milestone: string,
+    opts?: { longitude?: number; latitude?: number; note?: string }
+  ) =>
+    apiClient.patch(`/trips/driver/${tripId}/milestone`, {
+      milestone,
+      ...(opts?.longitude != null && {
+        location: { type: "Point", coordinates: [opts.longitude, opts.latitude] },
+      }),
+      ...(opts?.note && { note: opts.note }),
+    }),
+
+  getWallet: () =>
+    apiClient.get("/driver/wallet"),
 };
 
 // Orders & Marketplace
