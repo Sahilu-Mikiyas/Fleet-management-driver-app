@@ -4,11 +4,15 @@ import {
   Linking, Platform, Alert, TextInput, Animated,
 } from "react-native";
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
+import Constants from "expo-constants";
 import * as Location from "expo-location";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/use-colors";
 import { driverApi, geofencesApi } from "@/lib/api-client";
 import { DeliveryVerificationModal } from "./delivery-verification-modal";
+
+const mapsApiKey = Constants.expoConfig?.android?.config?.googleMaps?.apiKey ?? "";
+const mapProvider = mapsApiKey ? PROVIDER_GOOGLE : undefined;
 
 interface LocationPoint {
   address?: string;
@@ -275,7 +279,7 @@ export function ActiveTrip({ assignment, isLoading, onRefresh }: ActiveTripProps
         <AnimatedCard delay={0}>
           <View className="h-52 mx-4 mt-3 rounded-2xl overflow-hidden border border-border">
             <MapView
-              provider={PROVIDER_GOOGLE}
+              provider={mapProvider}
               className="flex-1"
               initialRegion={{
                 latitude: assignment.pickupLocation?.latitude ?? 9.03,

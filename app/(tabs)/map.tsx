@@ -3,9 +3,14 @@ import { View, Text, Pressable, ActivityIndicator, Platform, Animated, Easing } 
 import MapView, { Marker, Polyline, Circle, PROVIDER_GOOGLE } from "react-native-maps";
 import * as Location from "expo-location";
 import * as Linking from "expo-linking";
+import Constants from "expo-constants";
 import { useColors } from "@/hooks/use-colors";
 import { driverApi, geofencesApi } from "@/lib/api-client";
 import { ScreenContainer } from "@/components/screen-container";
+
+// Only use Google provider if the API key is actually configured
+const mapsApiKey = Constants.expoConfig?.android?.config?.googleMaps?.apiKey ?? "";
+const mapProvider = mapsApiKey ? PROVIDER_GOOGLE : undefined;
 
 interface Coord { latitude: number; longitude: number }
 
@@ -219,7 +224,7 @@ export function MapContent() {
     <View className="flex-1">
       <MapView
         ref={mapRef}
-        provider={PROVIDER_GOOGLE}
+        provider={mapProvider}
         style={{ flex: 1 }}
         initialRegion={initialRegion}
         showsUserLocation={permissionGranted}
@@ -388,10 +393,31 @@ export function MapContent() {
   );
 }
 
+class MapErrorBoundary extends React.Component<{ children: React.ReactNode }, { crashed: boolean }> {
+  state = { crashed: false };
+  static getDerivedStateFromError() { return { crashed: true }; }
+  render() {
+    if (this.state.crashed) {
+      return (
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 32 }}>
+          <Text style={{ fontSize: 48, marginBottom: 12 }}>🗺️</Text>
+          <Text style={{ fontSize: 16, fontWeight: "bold", textAlign: "center", marginBottom: 6 }}>Map Unavailable</Text>
+          <Text style={{ fontSize: 13, textAlign: "center", opacity: 0.6 }}>
+            Google Maps API key is not configured for this build. Contact your administrator.
+          </Text>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function MapScreen() {
   return (
     <ScreenContainer className="p-0">
-      <MapContent />
+      <MapErrorBoundary>
+        <MapContent />
+      </MapErrorBoundary>
     </ScreenContainer>
   );
 }

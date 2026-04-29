@@ -100,7 +100,10 @@ export default function CargoDetailScreen() {
   }
 
   const UMBRELLA_COMPANY_ID = process.env.EXPO_PUBLIC_UMBRELLA_COMPANY_ID;
-  const isTransporter = driver?.companyId === UMBRELLA_COMPANY_ID;
+  // Show bid button for: private transporters OR company transporters under the umbrella company
+  const isTransporter = driver?.role === "PRIVATE_TRANSPORTER" ||
+    (!!UMBRELLA_COMPANY_ID && driver?.companyId === UMBRELLA_COMPANY_ID) ||
+    (!UMBRELLA_COMPANY_ID && !!driver); // fallback: show to any authenticated driver if env not set
   const cargoType = (cargo.cargo?.type || "standard").toLowerCase();
   const typeStyle = CARGO_TYPE_STYLES[cargoType] ?? CARGO_TYPE_STYLES.standard;
   const budget = cargo.pricing?.proposedBudget || 0;

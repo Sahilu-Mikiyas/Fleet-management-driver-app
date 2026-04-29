@@ -13,6 +13,9 @@
       "android": {
         "buildType": "apk",
         "gradleCommand": ":app:assembleRelease"
+      },
+      "env": {
+        "EXPO_PUBLIC_UMBRELLA_COMPANY_ID": "69ceb0aa636023d6770229e6"
       }
     },
     "production": {
@@ -20,6 +23,9 @@
       "android": {
         "buildType": "apk",
         "gradleCommand": ":app:assembleRelease"
+      },
+      "env": {
+        "EXPO_PUBLIC_UMBRELLA_COMPANY_ID": "69ceb0aa636023d6770229e6"
       }
     }
   },

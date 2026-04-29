@@ -170,6 +170,7 @@ export function MarketplaceContent() {
   const [cargoListings, setCargoListings] = useState<ApiMarketplaceOrder[]>([]);
   const [proposals, setProposals] = useState<ApiOrderProposal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [isBidsLoading, setIsBidsLoading] = useState(true);
   const headerAnim = useRef(new Animated.Value(0)).current;
 
@@ -177,15 +178,22 @@ export function MarketplaceContent() {
     Animated.spring(headerAnim, { toValue: 1, useNativeDriver: true, tension: 120, friction: 20 }).start();
   }, []);
 
-  useEffect(() => {
-    ordersApi.getMarketplace()
-      .then(res => {
-        const orders = res.data?.data?.orders ?? res.data?.data ?? [];
-        setCargoListings(orders.filter((o: ApiMarketplaceOrder) => o.status === "OPEN"));
-      })
-      .catch(console.error)
-      .finally(() => setIsLoading(false));
+  const fetchListings = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(false);
+    try {
+      const res = await ordersApi.getMarketplace();
+      const orders = res.data?.data?.orders ?? res.data?.data ?? [];
+      setCargoListings(orders.filter((o: ApiMarketplaceOrder) => o.status === "OPEN"));
+    } catch (e) {
+      console.error(e);
+      setLoadError(true);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => { fetchListings(); }, [fetchListings]);
 
   const fetchProposals = useCallback(async () => {
     setIsBidsLoading(true);
@@ -313,6 +321,17 @@ export function MarketplaceContent() {
             <View className="py-16 items-center">
               <ActivityIndicator size="large" color={colors.primary} />
               <Text className="text-muted mt-3">Finding loads…</Text>
+            </View>
+          ) : loadError ? (
+            <View className="bg-surface rounded-2xl border border-border p-10 items-center">
+              <Text className="text-4xl mb-3">⚠️</Text>
+              <Text className="text-foreground font-bold text-base mb-1">Could Not Load</Text>
+              <Text className="text-muted text-sm text-center mb-4">Check your connection and try again.</Text>
+              <Pressable onPress={fetchListings} style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}>
+                <View className="bg-primary px-6 py-2.5 rounded-xl">
+                  <Text className="text-white font-bold text-sm">Retry</Text>
+                </View>
+              </Pressable>
             </View>
           ) : sorted.length === 0 ? (
             <View className="bg-surface rounded-2xl border border-border p-10 items-center">
