@@ -330,6 +330,9 @@ export const driverApi = {
 
   getWallet: () =>
     apiClient.get("/driver/wallet"),
+
+  getProfile: () =>
+    apiClient.get("/driver/profile"),
 };
 
 // Orders & Marketplace

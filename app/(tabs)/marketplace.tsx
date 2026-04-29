@@ -167,6 +167,7 @@ export function MarketplaceContent() {
   const [activeTab, setActiveTab] = useState<"loads" | "bids">("loads");
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<"price" | "date" | "weight">("price");
+  const [assignmentMode, setAssignmentMode] = useState<"ALL" | "OPEN_MARKETPLACE" | "DIRECT_COMPANY" | "DIRECT_PRIVATE_TRANSPORTER">("ALL");
   const [cargoListings, setCargoListings] = useState<ApiMarketplaceOrder[]>([]);
   const [proposals, setProposals] = useState<ApiOrderProposal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -227,10 +228,15 @@ export function MarketplaceContent() {
 
   const filtered = cargoListings.filter((c) => {
     const q = searchQuery.toLowerCase();
-    const matchSearch = !q || c.title.toLowerCase().includes(q) || (c.description || "").toLowerCase().includes(q);
+    const matchSearch = !q || c.title.toLowerCase().includes(q)
+      || (c.description || "").toLowerCase().includes(q)
+      || (c.pickupLocation?.city || "").toLowerCase().includes(q)
+      || (c.deliveryLocation?.city || "").toLowerCase().includes(q);
     const weight = c.cargo?.weightKg || 0;
     const budget = c.pricing?.proposedBudget || 0;
-    return matchSearch && weight >= filters.minWeight && weight <= filters.maxWeight
+    const matchMode = assignmentMode === "ALL" || c.assignmentMode === assignmentMode;
+    return matchSearch && matchMode
+      && weight >= filters.minWeight && weight <= filters.maxWeight
       && budget >= filters.minCompensation && budget <= filters.maxCompensation;
   });
 
@@ -289,7 +295,25 @@ export function MarketplaceContent() {
 
       {activeTab === "loads" ? (
         <View className="px-4 pt-4 gap-4">
-          {/* Sort chips */}
+          {/* Assignment Mode filter */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-4 px-4">
+            <View className="flex-row gap-2 pb-1">
+              {([
+                { key: "ALL",                        label: "All" },
+                { key: "OPEN_MARKETPLACE",           label: "Open Marketplace" },
+                { key: "DIRECT_COMPANY",             label: "Direct Company" },
+                { key: "DIRECT_PRIVATE_TRANSPORTER", label: "Direct Private" },
+              ] as const).map(opt => (
+                <Pressable key={opt.key} onPress={() => setAssignmentMode(opt.key)} style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}>
+                  <View className={`px-4 py-2 rounded-full border ${assignmentMode === opt.key ? "bg-primary border-primary" : "bg-surface border-border"}`}>
+                    <Text className={`text-xs font-bold ${assignmentMode === opt.key ? "text-white" : "text-foreground"}`}>{opt.label}</Text>
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          </ScrollView>
+
+          {/* Sort + filter row */}
           <View className="flex-row gap-2">
             {(["price", "date", "weight"] as const).map((opt) => (
               <Pressable key={opt} onPress={() => setSortBy(opt)} style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}>

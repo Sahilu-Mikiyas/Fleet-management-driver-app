@@ -58,6 +58,13 @@ export function ProfileContent() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [driverProfile, setDriverProfile] = useState<any>(null);
+
+  useEffect(() => {
+    driverApi.getProfile()
+      .then(res => setDriverProfile(res.data?.data?.driver ?? res.data?.data ?? null))
+      .catch(() => {});
+  }, []);
 
   // Header animation
   const headerAnim = useRef(new Animated.Value(0)).current;
@@ -233,16 +240,32 @@ export function ProfileContent() {
           </View>
         </AnimatedCard>
 
-        {/* ── Profile Info Card ── */}
+        {/* ── Account Info Card ── */}
         <AnimatedCard delay={160}>
           <View className="bg-surface rounded-2xl border border-border px-5 pb-2 pt-4">
-            <Text className="text-xs font-bold text-muted uppercase tracking-widest mb-1">Profile Details</Text>
+            <Text className="text-xs font-bold text-muted uppercase tracking-widest mb-1">Account</Text>
+            <InfoRow label="Full Name" value={driver?.name || "—"} />
+            <InfoRow label="Email" value={driver?.email || "—"} />
             <InfoRow label="Phone" value={driver?.phoneNumber || "—"} />
-            <InfoRow label="Company" value={driver?.companyId || "—"} />
-            <InfoRow label="Member Since" value={memberSince} />
+            <InfoRow label="Role" value={driver?.role || "—"} />
             <InfoRow label="Status" value={driver?.status || "—"} />
           </View>
         </AnimatedCard>
+
+        {/* ── Driver Application Card ── */}
+        {driverProfile && (
+          <AnimatedCard delay={200}>
+            <View className="bg-surface rounded-2xl border border-border px-5 pb-2 pt-4">
+              <Text className="text-xs font-bold text-muted uppercase tracking-widest mb-1">Driver Application</Text>
+              {driverProfile.fullName && <InfoRow label="Full Name" value={driverProfile.fullName} />}
+              {driverProfile.email && <InfoRow label="Email" value={driverProfile.email} />}
+              {driverProfile.phoneNumber && <InfoRow label="Phone" value={driverProfile.phoneNumber} />}
+              {driverProfile.vehicleType && <InfoRow label="Vehicle Type" value={driverProfile.vehicleType} />}
+              {driverProfile.licenseNumber && <InfoRow label="License #" value={driverProfile.licenseNumber} />}
+              <InfoRow label="Status" value={driverProfile.status || "—"} />
+            </View>
+          </AnimatedCard>
+        )}
 
         {/* ── Settings Items ── */}
         <AnimatedCard delay={240}>

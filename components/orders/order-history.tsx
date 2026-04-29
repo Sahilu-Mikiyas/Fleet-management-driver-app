@@ -1,5 +1,5 @@
-import React, { useRef, useEffect } from "react";
-import { View, Text, ScrollView, ActivityIndicator, Pressable, Animated } from "react-native";
+import React, { useRef, useEffect, useState } from "react";
+import { View, Text, ScrollView, ActivityIndicator, Pressable, Animated, TextInput } from "react-native";
 import { useColors } from "@/hooks/use-colors";
 
 interface TripHistoryItem {
@@ -131,6 +131,8 @@ function TripCard({ trip, index }: { trip: TripHistoryItem; index: number }) {
 
 export function OrderHistory({ trips, isLoading }: OrderHistoryProps) {
   const colors = useColors();
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
 
   if (isLoading) {
     return (
@@ -141,17 +143,17 @@ export function OrderHistory({ trips, isLoading }: OrderHistoryProps) {
     );
   }
 
-  if (trips.length === 0) {
-    return (
-      <View className="flex-1 items-center justify-center p-8 mt-10">
-        <Text className="text-5xl mb-4">🗂️</Text>
-        <Text className="text-lg font-bold text-foreground text-center mb-2">No Past Trips</Text>
-        <Text className="text-sm text-muted text-center leading-5">
-          Completed and cancelled assignments will appear here.
-        </Text>
-      </View>
-    );
-  }
+  const STATUS_OPTIONS = ["ALL", "DELIVERED", "IN_TRANSIT", "CANCELLED", "COMPLETED"];
+
+  const filtered = trips.filter(t => {
+    const q = search.toLowerCase();
+    const matchSearch = !q
+      || (t.title || "").toLowerCase().includes(q)
+      || (t.pickupLocation?.city || "").toLowerCase().includes(q)
+      || (t.deliveryLocation?.city || "").toLowerCase().includes(q);
+    const matchStatus = statusFilter === "ALL" || t.status?.toUpperCase() === statusFilter;
+    return matchSearch && matchStatus;
+  });
 
   const delivered = trips.filter((t) => t.status?.toUpperCase() === "DELIVERED").length;
   const totalEarned = trips.reduce((sum, t) => sum + (t.pricing?.proposedBudget ?? 0), 0);
@@ -177,9 +179,44 @@ export function OrderHistory({ trips, isLoading }: OrderHistoryProps) {
         </View>
       </View>
 
-      {trips.map((trip, i) => (
-        <TripCard key={trip._id} trip={trip} index={i} />
-      ))}
+      {/* Search */}
+      <View className="flex-row items-center bg-surface border border-border rounded-2xl px-3 gap-2 mb-1">
+        <Text className="text-base">🔍</Text>
+        <TextInput
+          placeholder="Search by order #, city or title…"
+          placeholderTextColor={colors.muted}
+          value={search}
+          onChangeText={setSearch}
+          style={{ color: colors.foreground, flex: 1, paddingVertical: 12, fontSize: 13 }}
+        />
+      </View>
+
+      {/* Status filter chips */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-4 px-4 mb-1">
+        <View className="flex-row gap-2 pb-1">
+          {STATUS_OPTIONS.map(s => (
+            <Pressable key={s} onPress={() => setStatusFilter(s)} style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}>
+              <View className={`px-4 py-2 rounded-full border ${statusFilter === s ? "bg-primary border-primary" : "bg-surface border-border"}`}>
+                <Text className={`text-xs font-bold capitalize ${statusFilter === s ? "text-white" : "text-foreground"}`}>
+                  {s === "ALL" ? "All Statuses" : s.replace("_", " ")}
+                </Text>
+              </View>
+            </Pressable>
+          ))}
+        </View>
+      </ScrollView>
+
+      {filtered.length === 0 ? (
+        <View className="py-12 items-center">
+          <Text className="text-4xl mb-3">🗂️</Text>
+          <Text className="text-foreground font-bold text-base mb-1">No Trips Found</Text>
+          <Text className="text-muted text-sm text-center">Try a different search or status filter.</Text>
+        </View>
+      ) : (
+        filtered.map((trip, i) => (
+          <TripCard key={trip._id} trip={trip} index={i} />
+        ))
+      )}
 
       <View className="h-8" />
     </ScrollView>

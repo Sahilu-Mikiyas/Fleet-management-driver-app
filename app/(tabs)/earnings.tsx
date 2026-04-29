@@ -48,6 +48,8 @@ export function EarningsContent() {
   const colors = useColors();
   const [totalCommission, setTotalCommission] = useState(0);
   const [available, setAvailable] = useState(0);
+  const [lastPayout, setLastPayout] = useState(0);
+  const [accountStatus, setAccountStatus] = useState<string | null>(null);
   const [commissionHistory, setCommissionHistory] = useState<CommissionEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -77,7 +79,9 @@ export function EarningsContent() {
       if (walletRes.status === "fulfilled") {
         const d = walletRes.value.data?.data;
         if (d?.available != null) setAvailable(d.available);
-        if (d?.total != null) setTotalCommission(d.total);
+        if (d?.total != null || d?.totalLifetimeEarnings != null) setTotalCommission(d?.total ?? d?.totalLifetimeEarnings ?? 0);
+        if (d?.lastPayout != null) setLastPayout(d.lastPayout);
+        if (d?.accountStatus) setAccountStatus(d.accountStatus);
       }
     } catch {}
     finally { setIsLoading(false); }
@@ -126,10 +130,19 @@ export function EarningsContent() {
           ? <ActivityIndicator color="white" style={{ alignSelf: "flex-start", marginVertical: 8 }} />
           : <Text className="text-white text-4xl font-bold">ETB {totalCommission.toLocaleString()}</Text>
         }
-        <View className="flex-row gap-4 mt-5">
+        {accountStatus && (
+          <View className="mt-2 self-start bg-success/20 border border-success/40 px-3 py-1 rounded-full">
+            <Text className="text-success text-[10px] font-bold uppercase tracking-wide">✓ {accountStatus}</Text>
+          </View>
+        )}
+        <View className="flex-row gap-3 mt-5 flex-wrap">
           <View className="bg-white/10 rounded-2xl px-4 py-3 flex-1">
             <Text className="text-white/60 text-[10px] uppercase tracking-widest">Available</Text>
             <Text className="text-success text-xl font-bold mt-0.5">ETB {available.toLocaleString()}</Text>
+          </View>
+          <View className="bg-white/10 rounded-2xl px-4 py-3 flex-1">
+            <Text className="text-white/60 text-[10px] uppercase tracking-widest">Last Payout</Text>
+            <Text className="text-white text-xl font-bold mt-0.5">ETB {lastPayout.toLocaleString()}</Text>
           </View>
           <View className="bg-white/10 rounded-2xl px-4 py-3 flex-1">
             <Text className="text-white/60 text-[10px] uppercase tracking-widest">Trips</Text>
