@@ -134,18 +134,21 @@ export function OrdersHub() {
   return (
     <View style={styles.contentContainer}>
       {/* Header */}
-      <View className="px-4 pb-4 pt-4 border-b border-border bg-background">
+      <View className="bg-navy px-4 pb-4 pt-4">
         <View className="flex-row items-center justify-between mb-4">
-          <Text className="text-xl font-bold text-foreground">Orders Hub</Text>
+          <View>
+            <Text className="text-white text-xl font-bold">Orders Hub</Text>
+            <Text className="text-white/60 text-xs mt-0.5">Manage your assignments</Text>
+          </View>
 
-          {/* ── Availability Toggle ── */}
+          {/* Availability Toggle */}
           <Pressable
             onPress={handleToggleAvailability}
             disabled={isTogglingAvailability}
             className={`flex-row items-center gap-2 px-3 py-1.5 rounded-full border ${
               driver?.isAvailable
-                ? "bg-success/10 border-success/30"
-                : "bg-error/10 border-error/30"
+                ? "bg-success/20 border-success/40"
+                : "bg-error/20 border-error/40"
             }`}
             style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
           >

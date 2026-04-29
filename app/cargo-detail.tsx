@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { ScrollView, Text, View, Pressable, Alert, ActivityIndicator, Modal, TextInput } from "react-native";
+import React, { useState, useEffect, useRef } from "react";
+import { ScrollView, Text, View, Pressable, Alert, ActivityIndicator, Modal, TextInput, Animated } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Linking from "expo-linking";
@@ -7,96 +7,71 @@ import { ordersApi, type ApiMarketplaceOrder } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { useColors } from "@/hooks/use-colors";
 
+const CARGO_TYPE_STYLES: Record<string, { bg: string; text: string; border: string; icon: string }> = {
+  fragile:    { bg: "bg-warning/10",  text: "text-warning",  border: "border-warning/25",  icon: "🏺" },
+  perishable: { bg: "bg-primary/10",  text: "text-primary",  border: "border-primary/25",  icon: "🌡️" },
+  hazardous:  { bg: "bg-error/10",    text: "text-error",    border: "border-error/25",    icon: "⚠️" },
+  standard:   { bg: "bg-success/10",  text: "text-success",  border: "border-success/25",  icon: "📦" },
+};
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View className="flex-row justify-between items-center py-3 border-b border-border/50">
+      <Text className="text-sm text-muted">{label}</Text>
+      <Text className="text-sm font-bold text-foreground">{value}</Text>
+    </View>
+  );
+}
+
 export default function CargoDetailScreen() {
   const router = useRouter();
   const colors = useColors();
   const { driver } = useAuth();
   const { cargoId } = useLocalSearchParams<{ cargoId: string }>();
-  
+
   const [cargo, setCargo] = useState<ApiMarketplaceOrder | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  
-  // Proposal State
   const [isProposalModalVisible, setIsProposalModalVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [proposedPrice, setProposedPrice] = useState("");
   const [message, setMessage] = useState("");
   const [vehicleDetails, setVehicleDetails] = useState("");
 
+  const contentAnim = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
-    const fetchOrder = async () => {
-      try {
-        const response = await ordersApi.getMarketplace();
-        const orders = response.data.data?.orders || response.data.data || [];
-        const found = orders.find((o: ApiMarketplaceOrder) => o._id === cargoId);
-        setCargo(found || null);
-      } catch (error) {
-        console.error("Failed to fetch cargo details:", error);
-      } finally {
+    ordersApi.getMarketplace()
+      .then(res => {
+        const orders = res.data?.data?.orders ?? res.data?.data ?? [];
+        setCargo(orders.find((o: ApiMarketplaceOrder) => o._id === cargoId) ?? null);
+      })
+      .catch(console.error)
+      .finally(() => {
         setIsLoading(false);
-      }
-    };
-    fetchOrder();
+        Animated.spring(contentAnim, { toValue: 1, useNativeDriver: true, tension: 90, friction: 18 }).start();
+      });
   }, [cargoId]);
 
   const handleSubmitProposal = async () => {
-    if (!proposedPrice) {
-      Alert.alert("Required", "Please enter a proposed price.");
-      return;
-    }
-
+    if (!proposedPrice) { Alert.alert("Required", "Please enter a proposed price."); return; }
     setIsSubmitting(true);
     try {
-      await ordersApi.submitProposal(cargoId, {
-        proposedPrice: Number(proposedPrice),
-        currency: "ETB",
-        message,
-        vehicleDetails,
-      });
-      
+      await ordersApi.submitProposal(cargoId, { proposedPrice: Number(proposedPrice), currency: "ETB", message, vehicleDetails });
       setIsProposalModalVisible(false);
-      Alert.alert(
-        "Proposal Submitted!",
-        "Your proposal has been successfully sent to the shipper.",
-        [{ text: "OK", onPress: () => router.back() }]
-      );
-    } catch (error: any) {
-      Alert.alert("Submission Failed", error.message || "Failed to submit proposal.");
-    } finally {
-      setIsSubmitting(false);
-    }
+      Alert.alert("Proposal Submitted!", "Your proposal has been sent to the shipper.", [{ text: "OK", onPress: () => router.back() }]);
+    } catch (e: any) {
+      Alert.alert("Submission Failed", e.message || "Failed to submit proposal.");
+    } finally { setIsSubmitting(false); }
   };
 
   const handleOpenMap = () => {
     if (!cargo) return;
-    const origin = `${cargo.pickupLocation.latitude},${cargo.pickupLocation.longitude}`;
-    const destination = `${cargo.deliveryLocation.latitude},${cargo.deliveryLocation.longitude}`;
-    
-    // If we have coordinates, use them. Otherwise search by address.
     if (cargo.pickupLocation.latitude && cargo.deliveryLocation.latitude) {
-      Linking.openURL(`https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}`);
+      Linking.openURL(`https://www.google.com/maps/dir/?api=1&origin=${cargo.pickupLocation.latitude},${cargo.pickupLocation.longitude}&destination=${cargo.deliveryLocation.latitude},${cargo.deliveryLocation.longitude}`);
     } else {
-      const from = cargo.pickupLocation.address || cargo.pickupLocation.city;
-      const to = cargo.deliveryLocation.address || cargo.deliveryLocation.city;
-      Linking.openURL(`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from || "")}&destination=${encodeURIComponent(to || "")}`);
-    }
-  };
-
-  const getCargoTypeColor = (type?: string) => {
-    switch (type?.toLowerCase()) {
-      case "fragile": return "bg-yellow-100 dark:bg-yellow-900 border-yellow-200 dark:border-yellow-800";
-      case "perishable": return "bg-blue-100 dark:bg-blue-900 border-blue-200 dark:border-blue-800";
-      case "hazardous": return "bg-red-100 dark:bg-red-900 border-red-200 dark:border-red-800";
-      default: return "bg-green-100 dark:bg-green-900 border-green-200 dark:border-green-800";
-    }
-  };
-
-  const getCargoTypeTextColor = (type?: string) => {
-    switch (type?.toLowerCase()) {
-      case "fragile": return "text-yellow-700 dark:text-yellow-200";
-      case "perishable": return "text-blue-700 dark:text-blue-200";
-      case "hazardous": return "text-red-700 dark:text-red-200";
-      default: return "text-green-700 dark:text-green-200";
+      const from = cargo.pickupLocation.address || cargo.pickupLocation.city || "";
+      const to = cargo.deliveryLocation.address || cargo.deliveryLocation.city || "";
+      Linking.openURL(`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from)}&destination=${encodeURIComponent(to)}`);
     }
   };
 
@@ -104,7 +79,7 @@ export default function CargoDetailScreen() {
     return (
       <ScreenContainer className="items-center justify-center p-0">
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text className="text-muted mt-4">Loading details...</Text>
+        <Text className="text-muted mt-4 text-sm">Loading details…</Text>
       </ScreenContainer>
     );
   }
@@ -112,11 +87,13 @@ export default function CargoDetailScreen() {
   if (!cargo) {
     return (
       <ScreenContainer className="items-center justify-center p-0">
-        <Text className="text-4xl mb-4">📦</Text>
+        <Text className="text-5xl mb-4">📦</Text>
         <Text className="text-foreground text-lg font-bold mb-2">Load Not Found</Text>
-        <Text className="text-muted text-center mb-6">This load may have been assigned or cancelled.</Text>
-        <Pressable onPress={() => router.back()} className="bg-primary px-6 py-3 rounded-xl">
-          <Text className="text-white font-bold">Go Back</Text>
+        <Text className="text-muted text-center text-sm mb-6">This load may have been assigned or cancelled.</Text>
+        <Pressable onPress={() => router.back()} style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.97 : 1 }] }]}>
+          <View className="bg-primary px-8 py-3 rounded-2xl">
+            <Text className="text-white font-bold">Go Back</Text>
+          </View>
         </Pressable>
       </ScreenContainer>
     );
@@ -124,34 +101,45 @@ export default function CargoDetailScreen() {
 
   const UMBRELLA_COMPANY_ID = process.env.EXPO_PUBLIC_UMBRELLA_COMPANY_ID;
   const isTransporter = driver?.companyId === UMBRELLA_COMPANY_ID;
-  
-  const cargoType = cargo.cargo?.type || "standard";
+  const cargoType = (cargo.cargo?.type || "standard").toLowerCase();
+  const typeStyle = CARGO_TYPE_STYLES[cargoType] ?? CARGO_TYPE_STYLES.standard;
   const budget = cargo.pricing?.proposedBudget || 0;
   const currency = cargo.pricing?.currency || "ETB";
 
   return (
     <ScreenContainer className="p-0">
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header with Image Placeholder */}
-        <View className="bg-primary/10 h-48 items-center justify-center relative">
-          <Text className="text-6xl">📦</Text>
-          <Pressable onPress={() => router.back()} className="absolute top-12 left-6 bg-black/40 rounded-full p-2 w-10 h-10 items-center justify-center">
-            <Text className="text-white text-xl font-bold">←</Text>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+        {/* Navy header */}
+        <View className="bg-navy h-52 items-center justify-center relative">
+          <Text style={{ fontSize: 72 }}>{typeStyle.icon}</Text>
+          <Pressable
+            onPress={() => router.back()}
+            className="absolute top-12 left-5 w-10 h-10 rounded-full bg-black/30 items-center justify-center"
+            style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+          >
+            <Text className="text-white text-lg font-bold">←</Text>
           </Pressable>
+          {/* Cargo type badge */}
+          <View className={`absolute bottom-4 self-center px-3 py-1.5 rounded-full border ${typeStyle.bg} ${typeStyle.border}`}>
+            <Text className={`text-xs font-bold uppercase tracking-wide ${typeStyle.text}`}>{cargoType}</Text>
+          </View>
         </View>
 
-        {/* Title */}
-        <View className="bg-primary px-6 py-5">
-          <Text className="text-white text-2xl font-bold">{cargo.title}</Text>
-          <Text className="text-white/80 text-sm mt-1 leading-relaxed">
-            {cargo.description || "No description provided"}
-          </Text>
+        {/* Title bar */}
+        <View className="bg-navy/90 px-5 py-4 border-b border-white/10">
+          <Text className="text-white text-xl font-bold">{cargo.title}</Text>
+          {cargo.description ? (
+            <Text className="text-white/60 text-sm mt-1 leading-5">{cargo.description}</Text>
+          ) : null}
         </View>
 
-        <View className="px-5 py-6 gap-5">
-          {/* Compensation */}
-          <View className="bg-success/10 rounded-xl p-5 border border-success/20">
-            <Text className="text-xs font-bold text-success uppercase tracking-wider mb-1">Proposed Budget</Text>
+        <Animated.View
+          className="px-4 pt-5 gap-4"
+          style={{ opacity: contentAnim, transform: [{ translateY: contentAnim.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }}
+        >
+          {/* Budget */}
+          <View className="bg-success/10 rounded-2xl p-5 border border-success/20">
+            <Text className="text-xs font-bold text-success uppercase tracking-widest mb-1">Proposed Budget</Text>
             <Text className="text-3xl font-bold text-success">
               {budget > 0 ? `${currency} ${budget.toLocaleString()}` : "Open for Bids"}
             </Text>
@@ -160,56 +148,39 @@ export default function CargoDetailScreen() {
             )}
           </View>
 
-          {/* Cargo Type */}
-          <View className={`${getCargoTypeColor(cargoType)} rounded-xl p-4 border`}>
-            <Text className={`${getCargoTypeTextColor(cargoType)} font-bold uppercase tracking-wider`}>
-              {cargoType} Cargo
-            </Text>
-            <Text className={`${getCargoTypeTextColor(cargoType)} text-sm mt-1 opacity-90`}>
-              Special handling instructions may apply.
-            </Text>
-          </View>
-
-          {/* Route Details */}
-          <View className="bg-surface rounded-xl p-5 border border-border shadow-sm">
-            <Text className="text-sm font-bold text-muted uppercase tracking-wider mb-4">Route Details</Text>
-            <View className="gap-0">
-              {/* Pickup */}
-              <View className="flex-row gap-4">
-                <View className="items-center">
-                  <View className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/40 items-center justify-center border-2 border-blue-500">
-                    <Text className="text-xs">1</Text>
-                  </View>
-                  <View className="w-[2px] h-12 bg-border my-1" />
+          {/* Route */}
+          <View className="bg-surface rounded-2xl p-5 border border-border">
+            <Text className="text-xs font-bold text-muted uppercase tracking-widest mb-4">Route</Text>
+            <View className="flex-row gap-4">
+              <View className="items-center">
+                <View className="w-8 h-8 rounded-full bg-primary/15 border border-primary/30 items-center justify-center">
+                  <Text className="text-[10px] font-bold text-primary">A</Text>
                 </View>
-                <View className="flex-1 pb-6">
-                  <Text className="text-xs font-bold text-blue-500 uppercase">Pickup</Text>
-                  <Text className="text-base text-foreground font-bold mt-1">
-                    {cargo.pickupLocation.city || cargo.pickupLocation.address}
-                  </Text>
-                  <Text className="text-sm text-muted">{cargo.pickupLocation.address}</Text>
-                  <Text className="text-xs text-muted font-medium mt-1">
-                    Date: {new Date(cargo.pickupDate).toLocaleDateString()}
-                  </Text>
+                <View className="w-px flex-1 bg-border my-1" style={{ minHeight: 32 }} />
+                <View className="w-8 h-8 rounded-full bg-success/15 border border-success/30 items-center justify-center">
+                  <Text className="text-[10px] font-bold text-success">B</Text>
                 </View>
               </View>
-
-              {/* Delivery */}
-              <View className="flex-row gap-4">
-                <View className="items-center">
-                  <View className="w-8 h-8 rounded-full bg-surface items-center justify-center border-2 border-border">
-                    <Text className="text-xs">2</Text>
-                  </View>
+              <View className="flex-1 justify-between" style={{ gap: 24 }}>
+                <View>
+                  <Text className="text-[10px] font-bold text-primary uppercase tracking-wide">Pickup</Text>
+                  <Text className="text-base font-bold text-foreground mt-0.5">
+                    {cargo.pickupLocation.city || cargo.pickupLocation.address}
+                  </Text>
+                  <Text className="text-xs text-muted">{cargo.pickupLocation.address}</Text>
+                  <Text className="text-xs text-muted mt-0.5">
+                    📅 {new Date(cargo.pickupDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                  </Text>
                 </View>
-                <View className="flex-1 pb-2">
-                  <Text className="text-xs font-bold text-muted uppercase">Delivery</Text>
-                  <Text className="text-base text-foreground font-bold mt-1">
+                <View>
+                  <Text className="text-[10px] font-bold text-success uppercase tracking-wide">Delivery</Text>
+                  <Text className="text-base font-bold text-foreground mt-0.5">
                     {cargo.deliveryLocation.city || cargo.deliveryLocation.address}
                   </Text>
-                  <Text className="text-sm text-muted">{cargo.deliveryLocation.address}</Text>
+                  <Text className="text-xs text-muted">{cargo.deliveryLocation.address}</Text>
                   {cargo.deliveryDeadline && (
-                    <Text className="text-xs text-muted font-medium mt-1">
-                      Deadline: {new Date(cargo.deliveryDeadline).toLocaleDateString()}
+                    <Text className="text-xs text-muted mt-0.5">
+                      ⏰ Deadline: {new Date(cargo.deliveryDeadline).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                     </Text>
                   )}
                 </View>
@@ -217,131 +188,107 @@ export default function CargoDetailScreen() {
             </View>
           </View>
 
-          {/* Cargo Details */}
-          <View className="bg-surface rounded-xl p-5 border border-border shadow-sm">
-            <Text className="text-sm font-bold text-muted uppercase tracking-wider mb-4">Cargo Specifics</Text>
-            <View className="gap-3">
-              <View className="flex-row justify-between items-center pb-2 border-b border-border/50">
-                <Text className="text-sm text-muted">Weight</Text>
-                <Text className="text-sm font-bold text-foreground">
-                  {cargo.cargo?.weightKg ? `${cargo.cargo.weightKg} kg` : "Not specified"}
-                </Text>
-              </View>
-              <View className="flex-row justify-between items-center pb-2 border-b border-border/50">
-                <Text className="text-sm text-muted">Quantity</Text>
-                <Text className="text-sm font-bold text-foreground">
-                  {cargo.cargo?.quantity ? `${cargo.cargo.quantity} ${cargo.cargo.unit || 'units'}` : "Not specified"}
-                </Text>
-              </View>
-              <View className="flex-row justify-between items-center">
-                <Text className="text-sm text-muted">Vehicle Required</Text>
-                <Text className="text-sm font-bold text-foreground">
-                  {cargo.vehicleRequirements?.vehicleType || "Any suitable vehicle"}
-                </Text>
-              </View>
+          {/* Cargo specs */}
+          <View className="bg-surface rounded-2xl px-5 pt-4 pb-2 border border-border">
+            <Text className="text-xs font-bold text-muted uppercase tracking-widest mb-1">Cargo Specifics</Text>
+            <DetailRow label="Weight" value={cargo.cargo?.weightKg ? `${cargo.cargo.weightKg} kg` : "Not specified"} />
+            <DetailRow label="Quantity" value={cargo.cargo?.quantity ? `${cargo.cargo.quantity} ${cargo.cargo.unit || "units"}` : "Not specified"} />
+            <View className="flex-row justify-between items-center py-3">
+              <Text className="text-sm text-muted">Vehicle Required</Text>
+              <Text className="text-sm font-bold text-foreground">{cargo.vehicleRequirements?.vehicleType || "Any"}</Text>
             </View>
           </View>
 
-          {/* Special Instructions */}
-          {cargo.specialInstructions && (
-            <View className="bg-warning/10 rounded-xl p-4 border border-warning/20">
-              <Text className="text-xs font-bold text-warning uppercase tracking-wider mb-2">
-                Special Instructions
-              </Text>
-              <Text className="text-sm text-foreground leading-relaxed">{cargo.specialInstructions}</Text>
+          {/* Special instructions */}
+          {cargo.specialInstructions ? (
+            <View className="bg-warning/10 rounded-2xl p-4 border border-warning/20">
+              <Text className="text-xs font-bold text-warning uppercase tracking-widest mb-2">Special Instructions</Text>
+              <Text className="text-sm text-foreground leading-5">{cargo.specialInstructions}</Text>
             </View>
-          )}
+          ) : null}
 
-          {/* Action Buttons */}
-          <View className="gap-3 mt-4">
+          {/* Actions */}
+          <View className="gap-3 mt-2">
             {isTransporter && (
-              <Pressable
-                onPress={() => setIsProposalModalVisible(true)}
-                className="bg-primary rounded-xl py-4 items-center shadow-sm"
-                style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.98 : 1 }] }]}
-              >
-                <Text className="text-base font-bold text-white">📝 Submit Proposal</Text>
+              <Pressable onPress={() => setIsProposalModalVisible(true)} style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.97 : 1 }] }]}>
+                <View className="bg-primary rounded-2xl py-4 flex-row items-center justify-center gap-2">
+                  <Text className="text-xl">📝</Text>
+                  <Text className="text-white font-bold text-base">Submit Proposal</Text>
+                </View>
               </Pressable>
             )}
-
-            <Pressable
-              onPress={handleOpenMap}
-              className="bg-surface border border-primary/30 rounded-xl py-4 items-center shadow-sm"
-              style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.98 : 1 }] }]}
-            >
-              <Text className="text-base font-bold text-primary">🗺️ View Route on Map</Text>
+            <Pressable onPress={handleOpenMap} style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.97 : 1 }] }]}>
+              <View className="bg-surface border border-primary/30 rounded-2xl py-4 flex-row items-center justify-center gap-2">
+                <Text className="text-xl">🗺️</Text>
+                <Text className="text-primary font-bold text-base">View Route on Map</Text>
+              </View>
             </Pressable>
           </View>
-        </View>
-        <View className="h-12" />
+        </Animated.View>
       </ScrollView>
 
-      {/* ── Proposal Modal ── */}
+      {/* Proposal Modal */}
       <Modal visible={isProposalModalVisible} animationType="slide" transparent>
         <View className="flex-1 bg-black/60 justify-end">
-          <View className="bg-background rounded-t-3xl pt-6 pb-10 px-6 max-h-[90%]">
-            <View className="flex-row justify-between items-center mb-6">
-              <Text className="text-2xl font-bold text-foreground">Submit Proposal</Text>
-              <Pressable onPress={() => setIsProposalModalVisible(false)} className="w-8 h-8 bg-surface rounded-full items-center justify-center">
-                <Text className="text-foreground font-bold">✕</Text>
+          <View className="bg-background rounded-t-3xl pt-6 pb-10 px-6" style={{ maxHeight: "90%" }}>
+            <View className="flex-row justify-between items-center mb-5">
+              <Text className="text-xl font-bold text-foreground">Submit Proposal</Text>
+              <Pressable onPress={() => setIsProposalModalVisible(false)}>
+                <View className="w-8 h-8 bg-surface rounded-full items-center justify-center border border-border">
+                  <Text className="text-foreground font-bold text-xs">✕</Text>
+                </View>
               </Pressable>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} className="mb-6">
-              <Text className="text-sm text-muted mb-6">
-                Submit your bid for this load. The shipper will review your proposal and accept or reject it.
+            <ScrollView showsVerticalScrollIndicator={false} className="mb-5">
+              <Text className="text-sm text-muted mb-5 leading-5">
+                Submit your bid for this load. The shipper will review and accept or reject it.
               </Text>
-
               <View className="gap-4">
                 <View>
-                  <Text className="text-sm font-bold text-foreground mb-2">Proposed Price (ETB) *</Text>
+                  <Text className="text-xs font-bold text-muted uppercase tracking-widest mb-2">Proposed Price (ETB) *</Text>
                   <TextInput
                     placeholder="e.g. 5000"
-                    placeholderTextColor="#9BA1A6"
+                    placeholderTextColor={colors.muted}
                     keyboardType="numeric"
                     value={proposedPrice}
                     onChangeText={setProposedPrice}
-                    className="bg-surface border border-border rounded-xl px-4 py-3.5 text-foreground font-semibold"
+                    style={{ color: colors.foreground }}
+                    className="bg-surface border border-border rounded-2xl px-4 py-3.5 text-sm font-semibold"
                   />
                 </View>
-
                 <View>
-                  <Text className="text-sm font-bold text-foreground mb-2">Vehicle Details</Text>
+                  <Text className="text-xs font-bold text-muted uppercase tracking-widest mb-2">Vehicle Details</Text>
                   <TextInput
                     placeholder="e.g. Isuzu NPR, Plate: AA-12345"
-                    placeholderTextColor="#9BA1A6"
+                    placeholderTextColor={colors.muted}
                     value={vehicleDetails}
                     onChangeText={setVehicleDetails}
-                    className="bg-surface border border-border rounded-xl px-4 py-3.5 text-foreground"
+                    style={{ color: colors.foreground }}
+                    className="bg-surface border border-border rounded-2xl px-4 py-3.5 text-sm"
                   />
                 </View>
-
                 <View>
-                  <Text className="text-sm font-bold text-foreground mb-2">Message for Shipper</Text>
+                  <Text className="text-xs font-bold text-muted uppercase tracking-widest mb-2">Message for Shipper</Text>
                   <TextInput
-                    placeholder="Add any conditions or notes..."
-                    placeholderTextColor="#9BA1A6"
+                    placeholder="Add any conditions or notes…"
+                    placeholderTextColor={colors.muted}
                     multiline
                     numberOfLines={4}
                     textAlignVertical="top"
                     value={message}
                     onChangeText={setMessage}
-                    className="bg-surface border border-border rounded-xl px-4 py-3.5 text-foreground h-32"
+                    style={{ color: colors.foreground }}
+                    className="bg-surface border border-border rounded-2xl px-4 py-3.5 text-sm h-28"
                   />
                 </View>
               </View>
             </ScrollView>
 
-            <Pressable
-              onPress={handleSubmitProposal}
-              disabled={isSubmitting}
-              className={`rounded-xl py-4 items-center shadow-sm ${isSubmitting ? "bg-primary/50" : "bg-primary"}`}
-            >
-              {isSubmitting ? (
-                <ActivityIndicator color="white" />
-              ) : (
-                <Text className="text-white font-bold text-lg">Submit Bid</Text>
-              )}
+            <Pressable onPress={handleSubmitProposal} disabled={isSubmitting} style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.97 : 1 }], opacity: isSubmitting ? 0.6 : 1 }]}>
+              <View className="bg-primary rounded-2xl py-4 items-center">
+                {isSubmitting ? <ActivityIndicator color="white" /> : <Text className="text-white font-bold text-base">Submit Bid</Text>}
+              </View>
             </Pressable>
           </View>
         </View>
