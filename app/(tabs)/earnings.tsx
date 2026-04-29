@@ -59,9 +59,10 @@ export function EarningsContent() {
 
   const fetchEarnings = useCallback(async () => {
     try {
-      const [commissionRes, historyRes] = await Promise.allSettled([
+      const [commissionRes, historyRes, walletRes] = await Promise.allSettled([
         driverApi.getCommission(),
         driverApi.getCommissionHistory(),
+        driverApi.getWallet(),
       ]);
       if (commissionRes.status === "fulfilled") {
         const d = commissionRes.value.data?.data;
@@ -71,6 +72,12 @@ export function EarningsContent() {
       if (historyRes.status === "fulfilled") {
         const d = historyRes.value.data?.data;
         setCommissionHistory(d?.commissions ?? d ?? []);
+      }
+      // Wallet balance takes precedence over commission available if present
+      if (walletRes.status === "fulfilled") {
+        const d = walletRes.value.data?.data;
+        if (d?.available != null) setAvailable(d.available);
+        if (d?.total != null) setTotalCommission(d.total);
       }
     } catch {}
     finally { setIsLoading(false); }

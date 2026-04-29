@@ -1,12 +1,12 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import {
-  ScrollView, Text, View, Pressable, Alert,
+  ScrollView, Text, View, Pressable, Alert, Modal, TextInput, ActivityIndicator,
   Animated, Easing,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useAuth } from "@/lib/auth-context";
-import { driverApi } from "@/lib/api-client";
+import { driverApi, authApi } from "@/lib/api-client";
 import { useColors } from "@/hooks/use-colors";
 import * as Haptics from "expo-haptics";
 
@@ -51,8 +51,13 @@ export function ProfileContent() {
   const router = useRouter();
   const colors = useColors();
   const { driver, signOut, refreshDriver } = useAuth();
-  const [isOnDuty, setIsOnDuty] = React.useState(driver?.isAvailable ?? false);
-  const [isTogglingStatus, setIsTogglingStatus] = React.useState(false);
+  const [isOnDuty, setIsOnDuty] = useState(driver?.isAvailable ?? false);
+  const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   // Header animation
   const headerAnim = useRef(new Animated.Value(0)).current;
@@ -98,6 +103,31 @@ export function ProfileContent() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setIsTogglingStatus(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      Alert.alert("Required", "Please fill in all password fields."); return;
+    }
+    if (newPassword !== confirmPassword) {
+      Alert.alert("Mismatch", "New passwords don't match."); return;
+    }
+    if (newPassword.length < 8) {
+      Alert.alert("Too Short", "Password must be at least 8 characters."); return;
+    }
+    setIsChangingPassword(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      await authApi.updatePassword(currentPassword, newPassword, confirmPassword);
+      setShowPasswordModal(false);
+      setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
+      Alert.alert("✅ Updated", "Your password has been changed successfully.");
+    } catch (e: any) {
+      Alert.alert("Failed", e.message || "Could not change password.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -220,7 +250,7 @@ export function ProfileContent() {
             {[
               { icon: "🔔", label: "Notifications", onPress: () => {} },
               { icon: "🌓", label: "Appearance", onPress: () => {} },
-              { icon: "🔒", label: "Privacy & Security", onPress: () => {} },
+              { icon: "🔒", label: "Change Password", onPress: () => setShowPasswordModal(true) },
               { icon: "❓", label: "Help & Support", onPress: () => {} },
             ].map((item, i, arr) => (
               <Pressable
@@ -254,6 +284,55 @@ export function ProfileContent() {
         {/* App version note */}
         <Text className="text-center text-xs text-muted/60 mt-2">Fleet Driver v1.0.0</Text>
       </View>
+
+      {/* Change Password Modal */}
+      <Modal visible={showPasswordModal} animationType="slide" transparent>
+        <View className="flex-1 bg-black/60 justify-end">
+          <View className="bg-background rounded-t-3xl pt-6 pb-10 px-6">
+            <View className="flex-row justify-between items-center mb-5">
+              <Text className="text-xl font-bold text-foreground">Change Password</Text>
+              <Pressable onPress={() => setShowPasswordModal(false)}>
+                <View className="w-8 h-8 bg-surface rounded-full items-center justify-center border border-border">
+                  <Text className="text-foreground font-bold text-xs">✕</Text>
+                </View>
+              </Pressable>
+            </View>
+            <View className="gap-4">
+              {[
+                { label: "Current Password", value: currentPassword, onChange: setCurrentPassword },
+                { label: "New Password", value: newPassword, onChange: setNewPassword },
+                { label: "Confirm New Password", value: confirmPassword, onChange: setConfirmPassword },
+              ].map(({ label, value, onChange }) => (
+                <View key={label}>
+                  <Text className="text-xs font-bold text-muted uppercase tracking-widest mb-2">{label}</Text>
+                  <TextInput
+                    secureTextEntry
+                    value={value}
+                    onChangeText={onChange}
+                    placeholder="••••••••"
+                    placeholderTextColor={colors.muted}
+                    style={{ color: colors.foreground }}
+                    className="bg-surface border border-border rounded-2xl px-4 py-3.5 text-sm"
+                  />
+                </View>
+              ))}
+            </View>
+            <Pressable
+              onPress={handleChangePassword}
+              disabled={isChangingPassword}
+              className="mt-6"
+              style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.97 : 1 }], opacity: isChangingPassword ? 0.6 : 1 }]}
+            >
+              <View className="bg-primary rounded-2xl py-4 items-center">
+                {isChangingPassword
+                  ? <ActivityIndicator color="white" />
+                  : <Text className="text-white font-bold text-base">Update Password</Text>
+                }
+              </View>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
