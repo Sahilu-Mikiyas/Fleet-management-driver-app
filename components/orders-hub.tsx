@@ -133,7 +133,7 @@ export function OrdersHub() {
     { key: "active", label: `Active` },
     { key: "pending", label: `Pending${pendingOrders.length > 0 ? ` (${pendingOrders.length})` : ""}` },
     { key: "history", label: "History" },
-    ...(isTransporter ? [{ key: "market", label: "Market" }] : []),
+    ...(isTransporter ? [{ key: "market", label: "Marketplace" }] : []),
   ];
 
   return (
@@ -182,7 +182,7 @@ export function OrdersHub() {
           <OrderHistory trips={history} isLoading={isLoading} />
         )}
         {activeTab === "market" && isTransporter && (
-          <MarketplaceContent />
+          <MarketplaceContent embedded />
         )}
       </View>
     </View>
