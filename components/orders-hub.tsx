@@ -10,6 +10,7 @@ import { useAuth } from "@/lib/auth-context";
 import { ActiveTrip } from "./orders/active-trip";
 import { PendingAssignments } from "./orders/pending-assignments";
 import { OrderHistory } from "./orders/order-history";
+import { MarketplaceContent } from "@/app/(tabs)/marketplace";
 
 // Configure notification handler (show even when app is foregrounded)
 Notifications.setNotificationHandler({
@@ -125,10 +126,14 @@ export function OrdersHub() {
     ["IN_TRANSIT", "STARTED", "ARRIVED", "ASSIGNED"].includes(a.status?.toUpperCase())
   ) || null;
 
+  const UMBRELLA_COMPANY_ID = process.env.EXPO_PUBLIC_UMBRELLA_COMPANY_ID;
+  const isTransporter = !!UMBRELLA_COMPANY_ID && driver?.companyId === UMBRELLA_COMPANY_ID;
+
   const tabs = [
     { key: "active", label: `Active` },
     { key: "pending", label: `Pending${pendingOrders.length > 0 ? ` (${pendingOrders.length})` : ""}` },
     { key: "history", label: "History" },
+    ...(isTransporter ? [{ key: "market", label: "Market" }] : []),
   ];
 
   return (
@@ -175,6 +180,9 @@ export function OrdersHub() {
         )}
         {activeTab === "history" && (
           <OrderHistory trips={history} isLoading={isLoading} />
+        )}
+        {activeTab === "market" && isTransporter && (
+          <MarketplaceContent />
         )}
       </View>
     </View>

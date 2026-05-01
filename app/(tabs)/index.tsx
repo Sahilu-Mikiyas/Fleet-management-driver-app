@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ScrollView, View, Text, Animated, Easing } from "react-native";
+import { ScrollView, View, Text, Animated, Easing, Pressable } from "react-native";
+import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useAuth } from "@/lib/auth-context";
 import { useColors } from "@/hooks/use-colors";
@@ -27,23 +28,26 @@ function StatCard({ icon, label, value, sub, delay, color }: {
   );
 }
 
-function QuickActionRow({ icon, label, sub }: { icon: string; label: string; sub: string }) {
+function QuickActionRow({ icon, label, sub, onPress }: { icon: string; label: string; sub: string; onPress?: () => void }) {
   return (
-    <View className="bg-surface rounded-2xl px-4 py-3.5 border border-border flex-row items-center gap-3">
-      <View className="w-10 h-10 rounded-xl bg-primary/10 items-center justify-center">
-        <Text className="text-xl">{icon}</Text>
+    <Pressable onPress={onPress} style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }]}>
+      <View className="bg-surface rounded-2xl px-4 py-3.5 border border-border flex-row items-center gap-3">
+        <View className="w-10 h-10 rounded-xl bg-primary/10 items-center justify-center">
+          <Text className="text-xl">{icon}</Text>
+        </View>
+        <View className="flex-1">
+          <Text className="text-sm font-semibold text-foreground">{label}</Text>
+          <Text className="text-xs text-muted mt-0.5">{sub}</Text>
+        </View>
+        <Text className="text-muted text-sm">›</Text>
       </View>
-      <View className="flex-1">
-        <Text className="text-sm font-semibold text-foreground">{label}</Text>
-        <Text className="text-xs text-muted mt-0.5">{sub}</Text>
-      </View>
-      <Text className="text-muted text-sm">›</Text>
-    </View>
+    </Pressable>
   );
 }
 
 export function HomeContent() {
   const colors = useColors();
+  const router = useRouter();
   const { driver } = useAuth();
   const [commission, setCommission] = useState<{ available?: number; currency?: string } | null>(null);
   const headerAnim = useRef(new Animated.Value(0)).current;
@@ -135,9 +139,18 @@ export function HomeContent() {
 
         <Text className="text-xs font-bold text-muted uppercase tracking-widest mt-2">Quick Access</Text>
         <View className="gap-2.5">
-          <QuickActionRow icon="📋" label="View active trip" sub="See your current assignment" />
-          <QuickActionRow icon="🛒" label="Marketplace" sub="Browse open loads" />
-          <QuickActionRow icon="📊" label="Trip history & earnings" sub="Review completed deliveries" />
+          <QuickActionRow
+            icon="📋" label="View active trip" sub="See your current assignment"
+            onPress={() => router.navigate("/(tabs)/orders" as any)}
+          />
+          <QuickActionRow
+            icon="🛒" label="Marketplace" sub="Browse open loads"
+            onPress={() => router.navigate("/(tabs)/orders" as any)}
+          />
+          <QuickActionRow
+            icon="📊" label="Trip history & earnings" sub="Review completed deliveries"
+            onPress={() => router.navigate("/(tabs)/orders" as any)}
+          />
         </View>
       </View>
     </ScrollView>
