@@ -109,7 +109,7 @@ export function OrdersHub() {
     try {
       const newAvailability = !driver.isAvailable;
       await driverApi.updateStatus(
-        newAvailability ? "ACTIVE" : "INACTIVE",
+        newAvailability ? "ACTIVE" : "OFFLINE",
         newAvailability
       );
       await refreshDriver();

@@ -102,7 +102,7 @@ export function ProfileContent() {
     setIsTogglingStatus(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      await driverApi.updateStatus(newStatus ? "ACTIVE" : "INACTIVE", newStatus);
+      await driverApi.updateStatus(newStatus ? "ACTIVE" : "OFFLINE", newStatus);
       await refreshDriver();
     } catch (error) {
       setIsOnDuty(!newStatus);
