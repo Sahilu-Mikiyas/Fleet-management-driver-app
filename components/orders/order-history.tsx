@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from "react";
 import { View, Text, ScrollView, ActivityIndicator, Pressable, Animated, TextInput } from "react-native";
+import { useRouter } from "expo-router";
 import { useColors } from "@/hooks/use-colors";
 
 interface TripHistoryItem {
@@ -27,6 +28,7 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; border: string; 
 };
 
 function TripCard({ trip, index }: { trip: TripHistoryItem; index: number }) {
+  const router = useRouter();
   const anim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -54,6 +56,10 @@ function TripCard({ trip, index }: { trip: TripHistoryItem; index: number }) {
         transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }],
       }}
     >
+      <Pressable
+        onPress={() => router.push({ pathname: "/(tabs)/trip-detail" as any, params: { tripId: trip._id } })}
+        style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.985 : 1 }] }]}
+      >
       <View className="bg-surface rounded-2xl border border-border overflow-hidden">
         {/* Top accent bar */}
         <View className={`h-1 ${s.bg}`} />
@@ -125,6 +131,7 @@ function TripCard({ trip, index }: { trip: TripHistoryItem; index: number }) {
           </View>
         </View>
       </View>
+      </Pressable>
     </Animated.View>
   );
 }

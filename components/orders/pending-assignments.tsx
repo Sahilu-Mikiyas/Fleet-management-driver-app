@@ -1,5 +1,6 @@
 import React, { useRef, useEffect } from "react";
 import { View, Text, Pressable, ActivityIndicator, ScrollView, Animated, Alert } from "react-native";
+import { useRouter } from "expo-router";
 import { useColors } from "@/hooks/use-colors";
 import { driverApi } from "@/lib/api-client";
 import * as Haptics from "expo-haptics";
@@ -24,6 +25,7 @@ function AssignmentCard({ assignment, index, onAccept, onReject }: {
   assignment: Assignment; index: number;
   onAccept: () => void; onReject: () => void;
 }) {
+  const router = useRouter();
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.spring(anim, { toValue: 1, useNativeDriver: true, tension: 90, friction: 18, delay: index * 80 }).start();
@@ -35,6 +37,10 @@ function AssignmentCard({ assignment, index, onAccept, onReject }: {
 
   return (
     <Animated.View style={{ opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }}>
+      <Pressable
+        onPress={() => router.push({ pathname: "/(tabs)/trip-detail" as any, params: { tripId: assignment._id } })}
+        style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.985 : 1 }] }]}
+      >
       <View className="bg-surface rounded-2xl border border-border overflow-hidden">
         {/* Orange accent top */}
         <View className="h-1 bg-warning/60" />
@@ -111,6 +117,7 @@ function AssignmentCard({ assignment, index, onAccept, onReject }: {
           </View>
         </View>
       </View>
+      </Pressable>
     </Animated.View>
   );
 }

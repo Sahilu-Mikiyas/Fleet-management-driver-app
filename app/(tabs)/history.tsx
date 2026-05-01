@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { ScrollView, Text, View, Pressable, TextInput, ActivityIndicator, Animated } from "react-native";
+import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { driverApi } from "@/lib/api-client";
 import { useColors } from "@/hooks/use-colors";
@@ -22,6 +23,7 @@ const STATUS_MAP: Record<string, { label: string; bg: string; text: string; bord
 };
 
 function TripRow({ trip, index }: { trip: TripHistoryItem; index: number }) {
+  const router = useRouter();
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.spring(anim, { toValue: 1, useNativeDriver: true, tension: 90, friction: 18, delay: index * 50 }).start();
@@ -30,6 +32,10 @@ function TripRow({ trip, index }: { trip: TripHistoryItem; index: number }) {
   const date = new Date(trip.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" });
   return (
     <Animated.View style={{ opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }}>
+      <Pressable
+        onPress={() => router.push({ pathname: "/(tabs)/trip-detail" as any, params: { tripId: trip._id } })}
+        style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.985 : 1 }] }]}
+      >
       <View className="bg-surface rounded-2xl border border-border overflow-hidden">
         <View className={`h-0.5 ${s.bg}`} />
         <View className="p-4">
@@ -65,6 +71,7 @@ function TripRow({ trip, index }: { trip: TripHistoryItem; index: number }) {
           )}
         </View>
       </View>
+      </Pressable>
     </Animated.View>
   );
 }

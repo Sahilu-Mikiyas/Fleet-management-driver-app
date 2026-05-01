@@ -331,6 +331,9 @@ export const driverApi = {
   getWallet: () =>
     apiClient.get("/driver/wallet"),
 
+  requestPayout: (amount: number, currency = "ETB") =>
+    apiClient.post("/driver/payout", { amount, currency }),
+
   getProfile: () =>
     apiClient.get("/driver/profile"),
 };

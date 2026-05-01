@@ -34,36 +34,44 @@ export function OrdersHub() {
   // Data States
   const [assignments, setAssignments] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
 
-  const fetchData = useCallback(async () => {
-    setIsLoading(true);
+  // Fast poll: assignments every 5s (tracks active trip changes in near-real-time)
+  const fetchAssignments = useCallback(async () => {
     try {
-      const [assignmentsRes, historyRes] = await Promise.allSettled([
-        driverApi.getAssignments(),
-        driverApi.getTripHistory(),
-      ]);
-
-      if (assignmentsRes.status === "fulfilled") {
-        const data = assignmentsRes.value.data;
-        setAssignments(data.data?.assignments || data.data || []);
-      }
-
-      if (historyRes.status === "fulfilled") {
-        const data = historyRes.value.data;
-        setHistory(data.data?.trips || data.data || []);
-      }
-    } catch (error) {
-      console.error("Error fetching orders data:", error);
-    } finally {
-      setIsLoading(false);
-    }
+      const res = await driverApi.getAssignments();
+      const data = res.data;
+      setAssignments(data.data?.assignments || data.data || []);
+    } catch {}
+    finally { setIsLoading(false); }
   }, []);
 
+  // Slower poll: trip history every 30s
+  const fetchHistory = useCallback(async () => {
+    try {
+      const res = await driverApi.getTripHistory();
+      const data = res.data;
+      setHistory(data.data?.trips || data.data || []);
+    } catch {}
+    finally { setHistoryLoading(false); }
+  }, []);
+
+  const fetchData = useCallback(() => {
+    fetchAssignments();
+    fetchHistory();
+  }, [fetchAssignments, fetchHistory]);
+
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
+    fetchAssignments();
+    const fast = setInterval(fetchAssignments, 5000);
+    return () => clearInterval(fast);
+  }, [fetchAssignments]);
+
+  useEffect(() => {
+    fetchHistory();
+    const slow = setInterval(fetchHistory, 30000);
+    return () => clearInterval(slow);
+  }, [fetchHistory]);
 
   // ── Push Notification on New Assignment ──
   useEffect(() => {
@@ -179,7 +187,7 @@ export function OrdersHub() {
           <PendingAssignments assignments={pendingOrders} isLoading={isLoading} onRefresh={fetchData} />
         )}
         {activeTab === "history" && (
-          <OrderHistory trips={history} isLoading={isLoading} />
+          <OrderHistory trips={history} isLoading={historyLoading} />
         )}
         {activeTab === "market" && isTransporter && (
           <MarketplaceContent embedded />
