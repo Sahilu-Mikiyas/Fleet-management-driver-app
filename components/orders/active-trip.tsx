@@ -3,16 +3,11 @@ import {
   View, Text, Pressable, ScrollView, ActivityIndicator,
   Linking, Platform, Alert, TextInput, Animated,
 } from "react-native";
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
-import Constants from "expo-constants";
 import * as Location from "expo-location";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/use-colors";
 import { driverApi, geofencesApi } from "@/lib/api-client";
 import { DeliveryVerificationModal } from "./delivery-verification-modal";
-
-const mapsApiKey = Constants.expoConfig?.android?.config?.googleMaps?.apiKey ?? "";
-const mapProvider = mapsApiKey ? PROVIDER_GOOGLE : undefined;
 
 interface LocationPoint {
   address?: string;
@@ -80,20 +75,6 @@ function AnimatedCard({ children, delay = 0 }: { children: React.ReactNode; dela
   );
 }
 
-interface Coord { latitude: number; longitude: number }
-
-async function fetchOsrmRoute(fromLng: number, fromLat: number, toLng: number, toLat: number): Promise<Coord[]> {
-  try {
-    const url = `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson`;
-    const res = await fetch(url);
-    const json = await res.json();
-    return (json.routes?.[0]?.geometry?.coordinates ?? [] as [number,number][])
-      .map(([lng, lat]: [number, number]) => ({ latitude: lat, longitude: lng }));
-  } catch {
-    return [{ latitude: fromLat, longitude: fromLng }, { latitude: toLat, longitude: toLng }];
-  }
-}
-
 export function ActiveTrip({ assignment, isLoading, onRefresh }: ActiveTripProps) {
   const colors = useColors();
   const [isVerificationModalVisible, setIsVerificationModalVisible] = useState(false);
@@ -101,7 +82,6 @@ export function ActiveTrip({ assignment, isLoading, onRefresh }: ActiveTripProps
   const [milestoneNote, setMilestoneNote] = useState("");
   const [showNoteInput, setShowNoteInput] = useState(false);
   const [geofenceWarning, setGeofenceWarning] = useState<string | null>(null);
-  const [routeCoords, setRouteCoords] = useState<Coord[]>([]);
   const geofencePulse = useRef(new Animated.Value(1)).current;
 
   // Geofence warning pulse animation
@@ -116,16 +96,6 @@ export function ActiveTrip({ assignment, isLoading, onRefresh }: ActiveTripProps
     loop.start();
     return () => loop.stop();
   }, [geofenceWarning]);
-
-  // Fetch OSRM route when assignment changes
-  useEffect(() => {
-    if (!assignment) { setRouteCoords([]); return; }
-    const p = assignment.pickupLocation;
-    const d = assignment.deliveryLocation;
-    if (p?.latitude && p?.longitude && d?.latitude && d?.longitude) {
-      fetchOsrmRoute(p.longitude, p.latitude, d.longitude, d.latitude).then(setRouteCoords);
-    }
-  }, [assignment?._id]);
 
   // Stream GPS location + check geofences every 30s during active trip
   useEffect(() => {
@@ -275,47 +245,61 @@ export function ActiveTrip({ assignment, isLoading, onRefresh }: ActiveTripProps
           </Animated.View>
         )}
 
-        {/* Mini map */}
+        {/* Route overview card (replaces MapView — no native crash) */}
         <AnimatedCard delay={0}>
-          <View className="h-52 mx-4 mt-3 rounded-2xl overflow-hidden border border-border">
-            <MapView
-              provider={mapProvider}
-              className="flex-1"
-              initialRegion={{
-                latitude: assignment.pickupLocation?.latitude ?? 9.03,
-                longitude: assignment.pickupLocation?.longitude ?? 38.74,
-                latitudeDelta: 0.15,
-                longitudeDelta: 0.15,
-              }}
-              showsUserLocation
-              scrollEnabled={false}
-              zoomEnabled={false}
-            >
-              {assignment.pickupLocation?.latitude && (
-                <Marker
-                  coordinate={{ latitude: assignment.pickupLocation.latitude!, longitude: assignment.pickupLocation.longitude! }}
-                  title="Pickup" pinColor="#3B82F6"
-                />
-              )}
-              {assignment.deliveryLocation?.latitude && (
-                <Marker
-                  coordinate={{ latitude: assignment.deliveryLocation.latitude!, longitude: assignment.deliveryLocation.longitude! }}
-                  title="Delivery" pinColor="#21C45D"
-                />
-              )}
-              {routeCoords.length > 1 && (
-                <Polyline coordinates={routeCoords} strokeColor={colors.primary} strokeWidth={4} />
-              )}
-            </MapView>
-            {/* Navigate overlay button */}
-            <Pressable
-              onPress={() => openNavigation(navTarget)}
-              className="absolute bottom-3 right-3 bg-primary px-3 py-2 rounded-xl flex-row items-center gap-1.5"
-              style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
-            >
-              <Text className="text-sm">🧭</Text>
-              <Text className="text-white font-bold text-xs">Navigate</Text>
-            </Pressable>
+          <View className="mx-4 mt-3 rounded-2xl border border-border bg-navy overflow-hidden">
+            {/* Header row */}
+            <View className="px-4 pt-4 pb-3 flex-row items-center justify-between">
+              <View className="flex-row items-center gap-2">
+                <Text className="text-white text-sm font-bold">Route</Text>
+                {assignment.status && (
+                  <View className="bg-white/15 px-2 py-0.5 rounded-full">
+                    <Text className="text-white/80 text-[10px] font-bold uppercase">{assignment.status.replace(/_/g, " ")}</Text>
+                  </View>
+                )}
+              </View>
+              <Pressable
+                onPress={() => openNavigation(navTarget)}
+                className="bg-primary px-3 py-1.5 rounded-xl flex-row items-center gap-1.5"
+                style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
+              >
+                <Text className="text-sm">🧭</Text>
+                <Text className="text-white font-bold text-xs">Navigate</Text>
+              </Pressable>
+            </View>
+
+            {/* A → B route */}
+            <View className="px-4 pb-4 flex-row gap-3">
+              <View className="items-center pt-1">
+                <View className="w-7 h-7 rounded-full bg-primary/25 border border-primary/50 items-center justify-center">
+                  <Text className="text-[10px] font-bold text-primary">A</Text>
+                </View>
+                <View className="w-px flex-1 bg-white/15 my-1" style={{ minHeight: 24 }} />
+                <View className="w-7 h-7 rounded-full bg-success/25 border border-success/50 items-center justify-center">
+                  <Text className="text-[10px] font-bold text-success">B</Text>
+                </View>
+              </View>
+              <View className="flex-1 justify-between gap-3">
+                <View>
+                  <Text className="text-white/50 text-[10px] uppercase tracking-wide">Pickup</Text>
+                  <Text className="text-white font-semibold text-sm mt-0.5" numberOfLines={1}>
+                    {assignment.pickupLocation?.city || assignment.pickupLocation?.address || "—"}
+                  </Text>
+                  {assignment.pickupLocation?.address && assignment.pickupLocation?.city && (
+                    <Text className="text-white/50 text-xs mt-0.5" numberOfLines={1}>{assignment.pickupLocation.address}</Text>
+                  )}
+                </View>
+                <View>
+                  <Text className="text-white/50 text-[10px] uppercase tracking-wide">Delivery</Text>
+                  <Text className="text-white font-semibold text-sm mt-0.5" numberOfLines={1}>
+                    {assignment.deliveryLocation?.city || assignment.deliveryLocation?.address || "—"}
+                  </Text>
+                  {assignment.deliveryLocation?.address && assignment.deliveryLocation?.city && (
+                    <Text className="text-white/50 text-xs mt-0.5" numberOfLines={1}>{assignment.deliveryLocation.address}</Text>
+                  )}
+                </View>
+              </View>
+            </View>
           </View>
         </AnimatedCard>
 

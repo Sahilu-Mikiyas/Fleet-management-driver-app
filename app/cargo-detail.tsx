@@ -100,7 +100,10 @@ export default function CargoDetailScreen() {
   }
 
   const UMBRELLA_COMPANY_ID = process.env.EXPO_PUBLIC_UMBRELLA_COMPANY_ID;
-  const isTransporter = !!UMBRELLA_COMPANY_ID && driver?.companyId === UMBRELLA_COMPANY_ID;
+  // In production (env var set): gate by company ID. In dev (env var absent): show to any driver.
+  const isTransporter = UMBRELLA_COMPANY_ID
+    ? driver?.companyId === UMBRELLA_COMPANY_ID
+    : !!driver;
   const cargoType = (cargo.cargo?.type || "standard").toLowerCase();
   const typeStyle = CARGO_TYPE_STYLES[cargoType] ?? CARGO_TYPE_STYLES.standard;
   const budget = cargo.pricing?.proposedBudget || 0;
