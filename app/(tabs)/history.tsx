@@ -8,6 +8,7 @@ import { useColors } from "@/hooks/use-colors";
 interface TripHistoryItem {
   _id: string;
   title?: string;
+  orderNumber?: string;
   status: string;
   pickupLocation?: { address?: string; city?: string };
   deliveryLocation?: { address?: string; city?: string };
@@ -16,10 +17,16 @@ interface TripHistoryItem {
 }
 
 const STATUS_MAP: Record<string, { label: string; bg: string; text: string; border: string }> = {
-  DELIVERED:  { label: "Delivered",  bg: "bg-success/15", text: "text-success", border: "border-success/30" },
-  CANCELLED:  { label: "Cancelled",  bg: "bg-error/15",   text: "text-error",   border: "border-error/30"   },
-  IN_TRANSIT: { label: "In Transit", bg: "bg-primary/15", text: "text-primary", border: "border-primary/30" },
-  COMPLETED:  { label: "Completed",  bg: "bg-success/15", text: "text-success", border: "border-success/30" },
+  ASSIGNED:            { label: "Assigned",     bg: "bg-warning/15",  text: "text-warning",  border: "border-warning/30"  },
+  STARTED:             { label: "Started",      bg: "bg-primary/15",  text: "text-primary",  border: "border-primary/30"  },
+  ARRIVED:             { label: "Arrived",      bg: "bg-info/15",     text: "text-info",     border: "border-info/30"     },
+  ARRIVED_AT_PICKUP:   { label: "At Pickup",    bg: "bg-primary/15",  text: "text-primary",  border: "border-primary/30"  },
+  PICKED_UP:           { label: "Picked Up",    bg: "bg-primary/15",  text: "text-primary",  border: "border-primary/30"  },
+  IN_TRANSIT:          { label: "In Transit",   bg: "bg-primary/15",  text: "text-primary",  border: "border-primary/30"  },
+  ARRIVED_AT_DELIVERY: { label: "At Delivery",  bg: "bg-info/15",     text: "text-info",     border: "border-info/30"     },
+  DELIVERED:           { label: "Delivered",    bg: "bg-success/15",  text: "text-success",  border: "border-success/30"  },
+  COMPLETED:           { label: "Completed",    bg: "bg-success/15",  text: "text-success",  border: "border-success/30"  },
+  CANCELLED:           { label: "Cancelled",    bg: "bg-error/15",    text: "text-error",    border: "border-error/30"    },
 };
 
 function TripRow({ trip, index }: { trip: TripHistoryItem; index: number }) {
@@ -41,8 +48,12 @@ function TripRow({ trip, index }: { trip: TripHistoryItem; index: number }) {
         <View className="p-4">
           <View className="flex-row justify-between items-start mb-2">
             <View className="flex-1 pr-3">
-              <Text className="text-sm font-bold text-foreground" numberOfLines={1}>{trip.title || "Completed Trip"}</Text>
-              <Text className="text-xs text-muted mt-0.5">{date}</Text>
+              <Text className="text-sm font-bold text-foreground" numberOfLines={1}>{trip.title || "Trip"}</Text>
+              {trip.orderNumber ? (
+                <Text className="text-[10px] text-muted mt-0.5">#{trip.orderNumber} · {date}</Text>
+              ) : (
+                <Text className="text-xs text-muted mt-0.5">{date}</Text>
+              )}
             </View>
             <View className="items-end gap-1">
               <View className={`px-2 py-1 rounded-lg border ${s.bg} ${s.border}`}>
@@ -53,18 +64,18 @@ function TripRow({ trip, index }: { trip: TripHistoryItem; index: number }) {
               ) : null}
             </View>
           </View>
-          {(trip.pickupLocation?.address || trip.deliveryLocation?.address) && (
+          {((trip.pickupLocation?.city || trip.pickupLocation?.address) || (trip.deliveryLocation?.city || trip.deliveryLocation?.address)) && (
             <View className="bg-background rounded-xl p-2.5 gap-1.5 border border-border/50">
-              {trip.pickupLocation?.address && (
+              {(trip.pickupLocation?.city || trip.pickupLocation?.address) && (
                 <View className="flex-row items-center gap-2">
                   <View className="w-4 h-4 rounded-full bg-primary/20 items-center justify-center"><Text className="text-[8px]">A</Text></View>
-                  <Text className="text-xs text-muted flex-1" numberOfLines={1}>{trip.pickupLocation.city || trip.pickupLocation.address}</Text>
+                  <Text className="text-xs text-muted flex-1" numberOfLines={1}>{trip.pickupLocation?.city || trip.pickupLocation?.address}</Text>
                 </View>
               )}
-              {trip.deliveryLocation?.address && (
+              {(trip.deliveryLocation?.city || trip.deliveryLocation?.address) && (
                 <View className="flex-row items-center gap-2">
                   <View className="w-4 h-4 rounded-full bg-success/20 items-center justify-center"><Text className="text-[8px]">B</Text></View>
-                  <Text className="text-xs text-muted flex-1" numberOfLines={1}>{trip.deliveryLocation.city || trip.deliveryLocation.address}</Text>
+                  <Text className="text-xs text-muted flex-1" numberOfLines={1}>{trip.deliveryLocation?.city || trip.deliveryLocation?.address}</Text>
                 </View>
               )}
             </View>
@@ -79,7 +90,7 @@ function TripRow({ trip, index }: { trip: TripHistoryItem; index: number }) {
 export function HistoryContent() {
   const colors = useColors();
   const [trips, setTrips] = useState<TripHistoryItem[]>([]);
-  const [filterStatus, setFilterStatus] = useState<"all" | "DELIVERED" | "CANCELLED">("all");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const headerAnim = useRef(new Animated.Value(0)).current;
@@ -96,6 +107,7 @@ export function HistoryContent() {
       const normalized = raw.map((t: any) => ({
         _id: t._id,
         title: t.orderId?.title,
+        orderNumber: t.orderId?.orderNumber,
         status: t.milestone ?? t.status,
         pickupLocation: t.orderId?.pickupLocation ?? t.pickupLocation,
         deliveryLocation: t.orderId?.deliveryLocation ?? t.deliveryLocation,
@@ -110,7 +122,7 @@ export function HistoryContent() {
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
 
   const filtered = trips.filter((t) => {
-    const matchesStatus = filterStatus === "all" || t.status?.toUpperCase() === filterStatus;
+    const matchesStatus = filterStatus === "all" || t.status?.toUpperCase() === filterStatus.toUpperCase();
     const q = searchQuery.toLowerCase();
     const matchesSearch = !q || (t.title || "").toLowerCase().includes(q)
       || (t.pickupLocation?.city || "").toLowerCase().includes(q)
@@ -122,9 +134,13 @@ export function HistoryContent() {
     .reduce((s, t) => s + (t.pricing?.proposedBudget || 0), 0);
 
   const FILTERS = [
-    { key: "all",       label: "All" },
-    { key: "DELIVERED", label: "Delivered" },
-    { key: "CANCELLED", label: "Cancelled" },
+    { key: "all",        label: "All" },
+    { key: "STARTED",    label: "Started" },
+    { key: "IN_TRANSIT", label: "In Transit" },
+    { key: "ARRIVED",    label: "Arrived" },
+    { key: "DELIVERED",  label: "Delivered" },
+    { key: "COMPLETED",  label: "Completed" },
+    { key: "CANCELLED",  label: "Cancelled" },
   ] as const;
 
   return (
@@ -167,15 +183,17 @@ export function HistoryContent() {
         </View>
 
         {/* Filter chips */}
-        <View className="flex-row gap-2">
-          {FILTERS.map(({ key, label }) => (
-            <Pressable key={key} onPress={() => setFilterStatus(key)} style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}>
-              <View className={`px-4 py-2 rounded-full border ${filterStatus === key ? "bg-primary border-primary" : "bg-surface border-border"}`}>
-                <Text className={`text-xs font-bold ${filterStatus === key ? "text-white" : "text-foreground"}`}>{label}</Text>
-              </View>
-            </Pressable>
-          ))}
-        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-4 px-4">
+          <View className="flex-row gap-2 pb-1">
+            {FILTERS.map(({ key, label }) => (
+              <Pressable key={key} onPress={() => setFilterStatus(key)} style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}>
+                <View className={`px-4 py-2 rounded-full border ${filterStatus === key ? "bg-primary border-primary" : "bg-surface border-border"}`}>
+                  <Text className={`text-xs font-bold ${filterStatus === key ? "text-white" : "text-foreground"}`}>{label}</Text>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        </ScrollView>
 
         {/* Trip list */}
         {isLoading ? (

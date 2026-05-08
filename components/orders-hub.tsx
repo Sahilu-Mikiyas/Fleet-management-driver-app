@@ -56,6 +56,7 @@ export function OrdersHub() {
       const normalized = raw.map((t: any) => ({
         _id: t._id,
         title: t.orderId?.title,
+        orderNumber: t.orderId?.orderNumber,
         status: t.milestone ?? t.status,
         pickupLocation: t.orderId?.pickupLocation ?? t.pickupLocation,
         deliveryLocation: t.orderId?.deliveryLocation ?? t.deliveryLocation,

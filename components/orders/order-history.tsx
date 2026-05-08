@@ -6,6 +6,7 @@ import { useColors } from "@/hooks/use-colors";
 interface TripHistoryItem {
   _id: string;
   title?: string;
+  orderNumber?: string;
   status: string;
   pickupLocation?: { address?: string; city?: string };
   deliveryLocation?: { address?: string; city?: string };
@@ -21,10 +22,16 @@ interface OrderHistoryProps {
 }
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; border: string; icon: string }> = {
-  DELIVERED:  { bg: "bg-success/15", text: "text-success", border: "border-success/30", icon: "✅" },
-  CANCELLED:  { bg: "bg-error/15",   text: "text-error",   border: "border-error/30",   icon: "❌" },
-  IN_TRANSIT: { bg: "bg-primary/15", text: "text-primary", border: "border-primary/30", icon: "🚚" },
-  COMPLETED:  { bg: "bg-success/15", text: "text-success", border: "border-success/30", icon: "✅" },
+  ASSIGNED:           { bg: "bg-warning/15",  text: "text-warning",  border: "border-warning/30",  icon: "📋" },
+  STARTED:            { bg: "bg-primary/15",  text: "text-primary",  border: "border-primary/30",  icon: "🚀" },
+  ARRIVED:            { bg: "bg-info/15",     text: "text-info",     border: "border-info/30",     icon: "📍" },
+  ARRIVED_AT_PICKUP:  { bg: "bg-primary/15",  text: "text-primary",  border: "border-primary/30",  icon: "📍" },
+  PICKED_UP:          { bg: "bg-primary/15",  text: "text-primary",  border: "border-primary/30",  icon: "📦" },
+  IN_TRANSIT:         { bg: "bg-primary/15",  text: "text-primary",  border: "border-primary/30",  icon: "🚚" },
+  ARRIVED_AT_DELIVERY:{ bg: "bg-info/15",     text: "text-info",     border: "border-info/30",     icon: "🏁" },
+  DELIVERED:          { bg: "bg-success/15",  text: "text-success",  border: "border-success/30",  icon: "✅" },
+  COMPLETED:          { bg: "bg-success/15",  text: "text-success",  border: "border-success/30",  icon: "✅" },
+  CANCELLED:          { bg: "bg-error/15",    text: "text-error",    border: "border-error/30",    icon: "❌" },
 };
 
 function TripCard({ trip, index }: { trip: TripHistoryItem; index: number }) {
@@ -69,21 +76,25 @@ function TripCard({ trip, index }: { trip: TripHistoryItem; index: number }) {
           <View className="flex-row justify-between items-start mb-3">
             <View className="flex-1 mr-3">
               <Text className="text-base font-bold text-foreground" numberOfLines={1}>
-                {trip.title || "Completed Trip"}
+                {trip.title || "Trip"}
               </Text>
-              <Text className="text-xs text-muted mt-0.5">{dateStr}</Text>
+              {trip.orderNumber ? (
+                <Text className="text-[10px] text-muted mt-0.5">#{trip.orderNumber} · {dateStr}</Text>
+              ) : (
+                <Text className="text-xs text-muted mt-0.5">{dateStr}</Text>
+              )}
             </View>
 
             <View className={`px-2.5 py-1 rounded-lg border ${s.bg} ${s.border} flex-row items-center gap-1`}>
               <Text className="text-[10px]">{s.icon}</Text>
-              <Text className={`text-[10px] font-bold ${s.text}`}>{trip.status}</Text>
+              <Text className={`text-[10px] font-bold ${s.text}`}>{trip.status?.replace(/_/g, " ")}</Text>
             </View>
           </View>
 
           {/* Route */}
-          {(trip.pickupLocation?.address || trip.deliveryLocation?.address) && (
+          {((trip.pickupLocation?.city || trip.pickupLocation?.address) || (trip.deliveryLocation?.city || trip.deliveryLocation?.address)) && (
             <View className="bg-background rounded-xl p-3 gap-2 mb-3 border border-border/50">
-              {trip.pickupLocation?.address && (
+              {(trip.pickupLocation?.city || trip.pickupLocation?.address) && (
                 <View className="flex-row items-center gap-2">
                   <View className="w-5 h-5 rounded-full bg-primary/20 items-center justify-center">
                     <Text className="text-[9px]">A</Text>
@@ -93,10 +104,10 @@ function TripCard({ trip, index }: { trip: TripHistoryItem; index: number }) {
                   </Text>
                 </View>
               )}
-              {trip.pickupLocation?.address && trip.deliveryLocation?.address && (
+              {(trip.pickupLocation?.city || trip.pickupLocation?.address) && (trip.deliveryLocation?.city || trip.deliveryLocation?.address) && (
                 <View className="ml-2.5 w-px h-3 bg-border" />
               )}
-              {trip.deliveryLocation?.address && (
+              {(trip.deliveryLocation?.city || trip.deliveryLocation?.address) && (
                 <View className="flex-row items-center gap-2">
                   <View className="w-5 h-5 rounded-full bg-success/20 items-center justify-center">
                     <Text className="text-[9px]">B</Text>
@@ -150,7 +161,7 @@ export function OrderHistory({ trips, isLoading }: OrderHistoryProps) {
     );
   }
 
-  const STATUS_OPTIONS = ["ALL", "DELIVERED", "IN_TRANSIT", "CANCELLED", "COMPLETED"];
+  const STATUS_OPTIONS = ["ALL", "STARTED", "IN_TRANSIT", "ARRIVED", "DELIVERED", "COMPLETED", "CANCELLED"];
 
   const filtered = trips.filter(t => {
     const q = search.toLowerCase();
