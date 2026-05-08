@@ -41,7 +41,105 @@ function txStyle(status: string) {
   return TX_STATUS_STYLE[status?.toUpperCase()] ?? TX_STATUS_STYLE.PENDING;
 }
 
-function CommissionRow({ tx, index }: { tx: CommissionRecord; index: number }) {
+// Full transaction detail from GET /transactions/:trx_ref
+interface TransactionDetail {
+  _id: string;
+  trx_ref: string;
+  status: string;
+  amount: number;
+  driverCommission: number;
+  commission: number;
+  companyShare: number;
+  orderId?: string | { _id: string; orderNumber?: string; title?: string };
+  shipperId?: { _id: string; fullName?: string; email?: string };
+  companyId?: { _id: string; companyName?: string; email?: string };
+  createdAt: string;
+}
+
+function TransactionDetailModal({ trxRef, onClose }: { trxRef: string | null; onClose: () => void }) {
+  const colors = useColors();
+  const [detail, setDetail] = useState<TransactionDetail | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!trxRef) { setDetail(null); return; }
+    setIsLoading(true);
+    paymentsApi.getTransaction(trxRef)
+      .then(res => {
+        const d = res.data?.data ?? res.data;
+        setDetail(d?.transaction ?? d);
+      })
+      .catch(() => setDetail(null))
+      .finally(() => setIsLoading(false));
+  }, [trxRef]);
+
+  const s = detail ? txStyle(detail.status) : TX_STATUS_STYLE.PENDING;
+  const earned = detail ? (detail.driverCommission ?? detail.amount ?? 0) : 0;
+  const orderId = typeof detail?.orderId === "object"
+    ? (detail.orderId?.orderNumber || detail.orderId?._id)
+    : detail?.orderId;
+
+  return (
+    <Modal visible={!!trxRef} animationType="slide" transparent onRequestClose={onClose}>
+      <View className="flex-1 bg-black/60 justify-end">
+        <View className="bg-background rounded-t-3xl pt-6 pb-10 px-6">
+          <View className="flex-row justify-between items-center mb-5">
+            <Text className="text-xl font-bold text-foreground">Transaction Detail</Text>
+            <Pressable onPress={onClose}>
+              <View className="w-8 h-8 bg-surface rounded-full items-center justify-center border border-border">
+                <Text className="text-foreground font-bold text-xs">✕</Text>
+              </View>
+            </Pressable>
+          </View>
+
+          {isLoading ? (
+            <View className="py-12 items-center">
+              <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+          ) : !detail ? (
+            <View className="py-12 items-center">
+              <Text className="text-4xl mb-3">⚠️</Text>
+              <Text className="text-foreground font-bold">Could not load details</Text>
+            </View>
+          ) : (
+            <View className="gap-3">
+              {/* Amount hero */}
+              <View className="bg-success/10 border border-success/20 rounded-2xl p-5 items-center">
+                <Text className="text-xs font-bold text-success uppercase tracking-widest mb-1">Amount Received</Text>
+                <Text className="text-3xl font-bold text-success">
+                  +{earned.toLocaleString()} ETB
+                </Text>
+                <View className={`mt-2 px-3 py-1 rounded-full border ${s.bg} ${s.border}`}>
+                  <Text className={`text-xs font-bold uppercase ${s.text}`}>{detail.status}</Text>
+                </View>
+              </View>
+
+              {/* Detail rows */}
+              {[
+                { label: "Reference",       value: detail.trx_ref },
+                { label: "Total Amount",    value: detail.amount > 0 ? `${detail.amount.toLocaleString()} ETB` : null },
+                { label: "Your Commission", value: detail.driverCommission > 0 ? `${detail.driverCommission.toLocaleString()} ETB` : null },
+                { label: "Platform Fee",    value: detail.commission > 0 ? `${detail.commission.toLocaleString()} ETB` : null },
+                { label: "Company Share",   value: detail.companyShare > 0 ? `${detail.companyShare.toLocaleString()} ETB` : null },
+                { label: "Order",           value: orderId as string | null },
+                { label: "Shipper",         value: detail.shipperId?.fullName || detail.shipperId?.email || null },
+                { label: "Company",         value: detail.companyId?.companyName || detail.companyId?.email || null },
+                { label: "Date",            value: new Date(detail.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }) },
+              ].filter(r => r.value).map(({ label, value }) => (
+                <View key={label} className="flex-row justify-between items-start py-2.5 border-b border-border/50">
+                  <Text className="text-xs font-bold text-muted uppercase tracking-wider flex-shrink-0 mr-4">{label}</Text>
+                  <Text className="text-sm font-semibold text-foreground flex-1 text-right" numberOfLines={2}>{value}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function CommissionRow({ tx, index, onPress }: { tx: CommissionRecord; index: number; onPress: () => void }) {
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.spring(anim, { toValue: 1, useNativeDriver: true, tension: 90, friction: 18, delay: index * 50 }).start();
@@ -52,19 +150,24 @@ function CommissionRow({ tx, index }: { tx: CommissionRecord; index: number }) {
   const earned = tx.driverCommission ?? tx.amount ?? 0;
   return (
     <Animated.View style={{ opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }}>
-      <View className="bg-surface rounded-2xl border border-border p-4 flex-row items-center">
-        <View className="w-10 h-10 rounded-xl bg-success/10 border border-success/20 items-center justify-center mr-3">
-          <Text className="text-base">📈</Text>
+      <Pressable onPress={onPress} style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.985 : 1 }] }]}>
+        <View className="bg-surface rounded-2xl border border-border p-4 flex-row items-center">
+          <View className="w-10 h-10 rounded-xl bg-success/10 border border-success/20 items-center justify-center mr-3">
+            <Text className="text-base">📈</Text>
+          </View>
+          <View className="flex-1">
+            <Text className="text-sm font-bold text-foreground">Shipment Payment Received</Text>
+            <Text className="text-xs text-muted mt-0.5">{dateStr} · {timeStr}</Text>
+            <Text className="text-[10px] text-muted/70 mt-0.5" numberOfLines={1}>{tx.trx_ref}</Text>
+          </View>
+          <View className="items-end gap-1">
+            <Text className="text-base font-bold text-success">
+              +{earned.toLocaleString()} <Text className="text-[10px] font-normal">ETB</Text>
+            </Text>
+            <Text className="text-[9px] text-muted">tap for details ›</Text>
+          </View>
         </View>
-        <View className="flex-1">
-          <Text className="text-sm font-bold text-foreground">Shipment Payment Received</Text>
-          <Text className="text-xs text-muted mt-0.5">{dateStr} · {timeStr}</Text>
-          <Text className="text-[10px] text-muted/70 mt-0.5" numberOfLines={1}>{tx.trx_ref}</Text>
-        </View>
-        <Text className="text-base font-bold text-success">
-          +{earned.toLocaleString()} <Text className="text-[10px] font-normal">ETB</Text>
-        </Text>
-      </View>
+      </Pressable>
     </Animated.View>
   );
 }
@@ -175,6 +278,7 @@ export function EarningsContent() {
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [selectedTrxRef, setSelectedTrxRef] = useState<string | null>(null);
   const headerAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -281,7 +385,7 @@ export function EarningsContent() {
         ) : (
           <View className="gap-2">
             {commissions.map((tx, i) => (
-              <CommissionRow key={tx._id} tx={tx} index={i} />
+              <CommissionRow key={tx._id} tx={tx} index={i} onPress={() => setSelectedTrxRef(tx.trx_ref)} />
             ))}
           </View>
         )}
@@ -307,6 +411,11 @@ export function EarningsContent() {
           </View>
         )}
       </View>
+
+      <TransactionDetailModal
+        trxRef={selectedTrxRef}
+        onClose={() => setSelectedTrxRef(null)}
+      />
 
       {showWithdrawModal && (
         <WithdrawModal
