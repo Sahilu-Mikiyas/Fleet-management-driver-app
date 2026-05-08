@@ -165,14 +165,47 @@ export function EarningsContent() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [walletRes, txRes] = await Promise.allSettled([
+      const [walletRes, commissionRes, txRes] = await Promise.allSettled([
         driverApi.getWallet(),
+        driverApi.getCommission(),
         paymentsApi.getTransactions(),
       ]);
+
       if (walletRes.status === "fulfilled") {
-        const d = walletRes.value.data?.data ?? walletRes.value.data;
-        setWallet(d?.wallet ?? d ?? {});
+        // Unwrap: { data: { wallet: {...} } } OR { data: { available, ... } }
+        const raw = walletRes.value.data?.data ?? walletRes.value.data;
+        const walletData: WalletData = raw?.wallet ?? raw ?? {};
+
+        // Commission endpoint has the authoritative total lifetime earnings.
+        // Merge it in so the header always matches the web dashboard.
+        if (commissionRes.status === "fulfilled") {
+          const cRaw = commissionRes.value.data?.data ?? commissionRes.value.data;
+          const c = cRaw?.commission ?? cRaw ?? {};
+          if (!walletData.totalLifetimeEarnings && (c.totalEarned ?? c.totalLifetimeEarnings)) {
+            walletData.totalLifetimeEarnings = c.totalEarned ?? c.totalLifetimeEarnings;
+          }
+          if (!walletData.total && c.total) walletData.total = c.total;
+          if (!walletData.available && c.available) walletData.available = c.available;
+          if (!walletData.pendingAmount && c.pending) walletData.pendingAmount = c.pending;
+          if (!walletData.currency && c.currency) walletData.currency = c.currency;
+        }
+
+        setWallet(walletData);
+      } else if (commissionRes.status === "fulfilled") {
+        // Wallet endpoint failed — fall back to commission data entirely
+        const cRaw = commissionRes.value.data?.data ?? commissionRes.value.data;
+        const c = cRaw?.commission ?? cRaw ?? {};
+        setWallet({
+          available: c.available ?? c.availableBalance,
+          total: c.total ?? c.totalEarned,
+          totalLifetimeEarnings: c.totalLifetimeEarnings ?? c.totalEarned,
+          lastPayout: c.lastPayout,
+          pendingAmount: c.pending ?? c.pendingAmount,
+          accountStatus: c.accountStatus,
+          currency: c.currency,
+        });
       }
+
       if (txRes.status === "fulfilled") {
         const d = txRes.value.data?.data ?? txRes.value.data;
         const list = d?.transactions ?? d ?? [];

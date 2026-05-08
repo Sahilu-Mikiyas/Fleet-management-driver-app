@@ -129,9 +129,9 @@ export function OrdersHub() {
   };
 
   // Derived state
-  const pendingOrders = assignments.filter((a) => a.status === "ASSIGNED");
+  const pendingOrders = assignments.filter((a) => a.status?.toUpperCase() === "ASSIGNED");
   const activeOrder = assignments.find((a) =>
-    ["IN_TRANSIT", "STARTED", "ARRIVED", "ASSIGNED"].includes(a.status?.toUpperCase())
+    ["STARTED", "ARRIVED", "ARRIVED_AT_PICKUP", "PICKED_UP", "IN_TRANSIT", "ARRIVED_AT_DELIVERY"].includes(a.status?.toUpperCase())
   ) || null;
 
   const UMBRELLA_COMPANY_ID = process.env.EXPO_PUBLIC_UMBRELLA_COMPANY_ID;
