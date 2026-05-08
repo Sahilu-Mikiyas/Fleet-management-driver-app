@@ -90,8 +90,19 @@ export function HistoryContent() {
 
   const fetchHistory = useCallback(async () => {
     try {
-      const res = await driverApi.getTripHistory();
-      setTrips(res.data?.data?.trips ?? res.data?.data ?? []);
+      const res = await driverApi.getDriverTrips();
+      const raw: any[] = res.data?.data?.trips ?? res.data?.data ?? [];
+      // GET /trips/driver/mine: trip.orderId is the nested order, trip.milestone is status
+      const normalized = raw.map((t: any) => ({
+        _id: t._id,
+        title: t.orderId?.title,
+        status: t.milestone ?? t.status,
+        pickupLocation: t.orderId?.pickupLocation ?? t.pickupLocation,
+        deliveryLocation: t.orderId?.deliveryLocation ?? t.deliveryLocation,
+        pricing: t.orderId?.pricing ?? t.pricing,
+        createdAt: t.createdAt,
+      }));
+      setTrips(normalized);
     } catch {}
     finally { setIsLoading(false); }
   }, []);

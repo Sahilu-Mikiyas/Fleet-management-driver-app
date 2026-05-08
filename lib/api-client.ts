@@ -307,6 +307,15 @@ export const driverApi = {
   getTripHistory: () =>
     apiClient.get("/driver/trips/history"),
 
+  getDriverTrips: () =>
+    apiClient.get("/trips/driver/mine"),
+
+  requestWithdrawal: (amount: number, note?: string) =>
+    apiClient.post("/driver/withdrawals", { amount, ...(note && { note }) }),
+
+  getWithdrawals: () =>
+    apiClient.get("/driver/withdrawals"),
+
   uploadEvidence: (tripId: string, formData: FormData) =>
     apiClient.post(`/driver/trips/${tripId}/evidence`, formData, {
       headers: { "Content-Type": "multipart/form-data" },

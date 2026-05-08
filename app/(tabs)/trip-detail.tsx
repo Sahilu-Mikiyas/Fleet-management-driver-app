@@ -88,18 +88,22 @@ export default function TripDetailScreen() {
     );
   }
 
-  const sc = statusConfig(trip.status);
-  const currentMilestoneIdx = MILESTONES.indexOf(trip.status?.toUpperCase());
+  // Trip objects from GET /trips/:id have nested orderId; assignments have fields directly
+  const order = trip.orderId ?? trip;
+  const status = trip.milestone ?? trip.status;
 
-  const pickupAddr = trip.pickupLocation?.city || trip.pickupLocation?.address;
-  const deliveryAddr = trip.deliveryLocation?.city || trip.deliveryLocation?.address;
-  const pickupFull = [trip.pickupLocation?.address, trip.pickupLocation?.city].filter(Boolean).join(", ");
-  const deliveryFull = [trip.deliveryLocation?.address, trip.deliveryLocation?.city].filter(Boolean).join(", ");
+  const sc = statusConfig(status);
+  const currentMilestoneIdx = MILESTONES.indexOf(status?.toUpperCase());
 
-  const pickupLat = trip.pickupLocation?.latitude;
-  const pickupLng = trip.pickupLocation?.longitude;
-  const deliveryLat = trip.deliveryLocation?.latitude;
-  const deliveryLng = trip.deliveryLocation?.longitude;
+  const pickupAddr = order.pickupLocation?.city || order.pickupLocation?.address;
+  const deliveryAddr = order.deliveryLocation?.city || order.deliveryLocation?.address;
+  const pickupFull = [order.pickupLocation?.address, order.pickupLocation?.city].filter(Boolean).join(", ");
+  const deliveryFull = [order.deliveryLocation?.address, order.deliveryLocation?.city].filter(Boolean).join(", ");
+
+  const pickupLat = order.pickupLocation?.latitude;
+  const pickupLng = order.pickupLocation?.longitude;
+  const deliveryLat = order.deliveryLocation?.latitude;
+  const deliveryLng = order.deliveryLocation?.longitude;
 
   const mapsUrl = deliveryLat && deliveryLng
     ? `https://www.google.com/maps/dir/?api=1${pickupLat ? `&origin=${pickupLat},${pickupLng}` : ""}&destination=${deliveryLat},${deliveryLng}`
@@ -107,14 +111,14 @@ export default function TripDetailScreen() {
     ? `https://www.google.com/maps/search/?api=1&query=${pickupLat},${pickupLng}`
     : null;
 
-  const pickupDate = trip.pickupDate
-    ? new Date(trip.pickupDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  const pickupDate = order.pickupDate
+    ? new Date(order.pickupDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
     : null;
-  const deliveryDeadline = trip.deliveryDeadline
-    ? new Date(trip.deliveryDeadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  const deliveryDeadline = order.deliveryDeadline
+    ? new Date(order.deliveryDeadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
     : null;
-  const createdAt = trip.createdAt
-    ? new Date(trip.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  const createdAt = (trip.createdAt || order.createdAt)
+    ? new Date(trip.createdAt || order.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
     : null;
 
   return (
@@ -133,10 +137,10 @@ export default function TripDetailScreen() {
           </Pressable>
 
           <Text className="text-white text-xl font-bold mb-1" numberOfLines={2}>
-            {trip.title || trip.orderNumber || "Trip Detail"}
+            {order.title || order.orderNumber || "Trip Detail"}
           </Text>
-          {trip.orderNumber && trip.title && (
-            <Text className="text-white/50 text-xs mb-3">#{trip.orderNumber}</Text>
+          {order.orderNumber && (
+            <Text className="text-white/50 text-xs mb-3">#{order.orderNumber}</Text>
           )}
 
           <View className="flex-row items-center gap-2 flex-wrap">
@@ -144,10 +148,10 @@ export default function TripDetailScreen() {
               <Text className="text-sm">{sc.icon}</Text>
               <Text className={`text-xs font-bold uppercase ${sc.text}`}>{sc.label}</Text>
             </View>
-            {trip.pricing?.proposedBudget > 0 && (
+            {order.pricing?.proposedBudget > 0 && (
               <View className="bg-success/20 border border-success/40 px-3 py-1.5 rounded-full">
                 <Text className="text-success text-xs font-bold">
-                  {trip.pricing.currency || "ETB"} {trip.pricing.proposedBudget.toLocaleString()}
+                  {order.pricing.currency || "ETB"} {order.pricing.proposedBudget.toLocaleString()}
                 </Text>
               </View>
             )}
@@ -200,15 +204,15 @@ export default function TripDetailScreen() {
                     <View className="flex-1">
                       <Text className="text-[10px] text-muted uppercase tracking-wide">Pickup</Text>
                       <Text className="text-sm font-bold text-foreground">{pickupAddr}</Text>
-                      {trip.pickupLocation?.address && trip.pickupLocation.address !== pickupAddr && (
-                        <Text className="text-xs text-muted mt-0.5" numberOfLines={2}>{trip.pickupLocation.address}</Text>
+                      {order.pickupLocation?.address && order.pickupLocation.address !== pickupAddr && (
+                        <Text className="text-xs text-muted mt-0.5" numberOfLines={2}>{order.pickupLocation.address}</Text>
                       )}
-                      {trip.pickupLocation?.contactName && (
-                        <Text className="text-xs text-muted mt-0.5">👤 {trip.pickupLocation.contactName}</Text>
+                      {order.pickupLocation?.contactName && (
+                        <Text className="text-xs text-muted mt-0.5">👤 {order.pickupLocation.contactName}</Text>
                       )}
-                      {trip.pickupLocation?.contactPhone && (
-                        <Pressable onPress={() => Linking.openURL(`tel:${trip.pickupLocation.contactPhone}`)}>
-                          <Text className="text-xs text-primary mt-0.5">📞 {trip.pickupLocation.contactPhone}</Text>
+                      {order.pickupLocation?.contactPhone && (
+                        <Pressable onPress={() => Linking.openURL(`tel:${order.pickupLocation.contactPhone}`)}>
+                          <Text className="text-xs text-primary mt-0.5">📞 {order.pickupLocation.contactPhone}</Text>
                         </Pressable>
                       )}
                     </View>
@@ -223,15 +227,15 @@ export default function TripDetailScreen() {
                     <View className="flex-1">
                       <Text className="text-[10px] text-muted uppercase tracking-wide">Delivery</Text>
                       <Text className="text-sm font-bold text-foreground">{deliveryAddr}</Text>
-                      {trip.deliveryLocation?.address && trip.deliveryLocation.address !== deliveryAddr && (
-                        <Text className="text-xs text-muted mt-0.5" numberOfLines={2}>{trip.deliveryLocation.address}</Text>
+                      {order.deliveryLocation?.address && order.deliveryLocation.address !== deliveryAddr && (
+                        <Text className="text-xs text-muted mt-0.5" numberOfLines={2}>{order.deliveryLocation.address}</Text>
                       )}
-                      {trip.deliveryLocation?.contactName && (
-                        <Text className="text-xs text-muted mt-0.5">👤 {trip.deliveryLocation.contactName}</Text>
+                      {order.deliveryLocation?.contactName && (
+                        <Text className="text-xs text-muted mt-0.5">👤 {order.deliveryLocation.contactName}</Text>
                       )}
-                      {trip.deliveryLocation?.contactPhone && (
-                        <Pressable onPress={() => Linking.openURL(`tel:${trip.deliveryLocation.contactPhone}`)}>
-                          <Text className="text-xs text-primary mt-0.5">📞 {trip.deliveryLocation.contactPhone}</Text>
+                      {order.deliveryLocation?.contactPhone && (
+                        <Pressable onPress={() => Linking.openURL(`tel:${order.deliveryLocation.contactPhone}`)}>
+                          <Text className="text-xs text-primary mt-0.5">📞 {order.deliveryLocation.contactPhone}</Text>
                         </Pressable>
                       )}
                     </View>
@@ -253,16 +257,43 @@ export default function TripDetailScreen() {
           )}
 
           {/* Cargo details */}
-          {trip.cargo && (trip.cargo.type || trip.cargo.description || trip.cargo.weightKg) && (
+          {order.cargo && (order.cargo.type || order.cargo.description || order.cargo.weightKg) && (
             <View className="bg-surface rounded-2xl border border-border p-4">
               <Text className="text-xs font-bold text-muted uppercase tracking-wider mb-3">Cargo</Text>
-              <DetailRow label="Type" value={trip.cargo.type} />
-              <DetailRow label="Description" value={trip.cargo.description} />
-              {trip.cargo.weightKg && <DetailRow label="Weight" value={`${trip.cargo.weightKg} kg`} />}
-              {trip.cargo.quantity && <DetailRow label="Quantity" value={`${trip.cargo.quantity} ${trip.cargo.unit || "items"}`} />}
-              {trip.cargo.specialHandling?.length > 0 && (
-                <DetailRow label="Special Handling" value={trip.cargo.specialHandling.join(", ")} />
+              <DetailRow label="Type" value={order.cargo.type} />
+              <DetailRow label="Description" value={order.cargo.description} />
+              {order.cargo.weightKg && <DetailRow label="Weight" value={`${order.cargo.weightKg} kg`} />}
+              {order.cargo.quantity && <DetailRow label="Quantity" value={`${order.cargo.quantity} ${order.cargo.unit || "items"}`} />}
+              {order.cargo.specialHandling?.length > 0 && (
+                <DetailRow label="Special Handling" value={order.cargo.specialHandling.join(", ")} />
               )}
+            </View>
+          )}
+
+          {/* Vehicle (for trip objects that have vehicleId populated) */}
+          {trip.vehicleId && (trip.vehicleId.plateNumber || trip.vehicleId.vehicleType) && (
+            <View className="bg-surface rounded-2xl border border-border p-4">
+              <Text className="text-xs font-bold text-muted uppercase tracking-wider mb-3">Vehicle</Text>
+              <DetailRow label="Plate" value={trip.vehicleId.plateNumber} />
+              <DetailRow label="Type" value={trip.vehicleId.vehicleType} />
+              <DetailRow label="Model" value={trip.vehicleId.model} />
+            </View>
+          )}
+
+          {/* Milestone history (for trip objects) */}
+          {trip.milestoneHistory?.length > 0 && (
+            <View className="bg-surface rounded-2xl border border-border p-4">
+              <Text className="text-xs font-bold text-muted uppercase tracking-wider mb-3">Milestone History</Text>
+              {[...trip.milestoneHistory].reverse().map((h: any, i: number) => (
+                <View key={i} className="flex-row gap-3 pb-3 mb-3 border-b border-border/40 last:border-0 last:mb-0 last:pb-0">
+                  <View className="w-2 h-2 rounded-full bg-primary mt-1.5" />
+                  <View className="flex-1">
+                    <Text className="text-sm font-semibold text-foreground">{h.milestone?.replace(/_/g, " ")}</Text>
+                    <Text className="text-xs text-muted mt-0.5">{new Date(h.at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</Text>
+                    {h.note ? <Text className="text-xs text-muted/80 mt-0.5 italic">"{h.note}"</Text> : null}
+                  </View>
+                </View>
+              ))}
             </View>
           )}
 
@@ -272,34 +303,34 @@ export default function TripDetailScreen() {
             <DetailRow label="Pickup Date" value={pickupDate} />
             <DetailRow label="Delivery Deadline" value={deliveryDeadline} />
             <DetailRow label="Created" value={createdAt} />
-            {trip.pricing?.proposedBudget > 0 && (
+            {order.pricing?.proposedBudget > 0 && (
               <DetailRow
                 label="Compensation"
-                value={`${trip.pricing.currency || "ETB"} ${trip.pricing.proposedBudget.toLocaleString()}`}
+                value={`${order.pricing.currency || "ETB"} ${order.pricing.proposedBudget.toLocaleString()}`}
               />
             )}
-            {trip.pricing?.paymentMethod && (
-              <DetailRow label="Payment Method" value={trip.pricing.paymentMethod.replace("_", " ")} />
+            {order.pricing?.paymentMethod && (
+              <DetailRow label="Payment Method" value={order.pricing.paymentMethod.replace("_", " ")} />
             )}
-            <DetailRow label="Assignment Mode" value={trip.assignmentMode?.replace(/_/g, " ")} />
-            {trip.specialInstructions && (
-              <DetailRow label="Special Instructions" value={trip.specialInstructions} />
+            <DetailRow label="Assignment Mode" value={order.assignmentMode?.replace(/_/g, " ")} />
+            {order.specialInstructions && (
+              <DetailRow label="Special Instructions" value={order.specialInstructions} />
             )}
           </View>
 
-          {/* Vehicle requirements */}
-          {trip.vehicleRequirements && (trip.vehicleRequirements.vehicleType || trip.vehicleRequirements.minimumCapacityKg) && (
+          {/* Vehicle requirements (for order/assignment objects) */}
+          {order.vehicleRequirements && (order.vehicleRequirements.vehicleType || order.vehicleRequirements.minimumCapacityKg) && (
             <View className="bg-surface rounded-2xl border border-border p-4">
               <Text className="text-xs font-bold text-muted uppercase tracking-wider mb-3">Vehicle Requirements</Text>
-              <DetailRow label="Type" value={trip.vehicleRequirements.vehicleType} />
-              {trip.vehicleRequirements.minimumCapacityKg && (
-                <DetailRow label="Min. Capacity" value={`${trip.vehicleRequirements.minimumCapacityKg} kg`} />
+              <DetailRow label="Type" value={order.vehicleRequirements.vehicleType} />
+              {order.vehicleRequirements.minimumCapacityKg && (
+                <DetailRow label="Min. Capacity" value={`${order.vehicleRequirements.minimumCapacityKg} kg`} />
               )}
             </View>
           )}
 
           {/* Delivery proof / OTP badges */}
-          {trip.status?.toUpperCase() === "DELIVERED" && (
+          {status?.toUpperCase() === "DELIVERED" && (
             <View className="flex-row gap-2">
               <View className="flex-1 bg-success/10 border border-success/20 rounded-2xl p-3 items-center">
                 <Text className="text-xl mb-1">🔐</Text>

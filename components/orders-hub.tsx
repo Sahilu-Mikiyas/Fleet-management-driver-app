@@ -49,9 +49,21 @@ export function OrdersHub() {
   // Slower poll: trip history every 30s
   const fetchHistory = useCallback(async () => {
     try {
-      const res = await driverApi.getTripHistory();
+      const res = await driverApi.getDriverTrips();
       const data = res.data;
-      setHistory(data.data?.trips || data.data || []);
+      // GET /trips/driver/mine returns trip objects with nested orderId
+      const raw: any[] = data.data?.trips || data.data || [];
+      const normalized = raw.map((t: any) => ({
+        _id: t._id,
+        title: t.orderId?.title,
+        status: t.milestone ?? t.status,
+        pickupLocation: t.orderId?.pickupLocation ?? t.pickupLocation,
+        deliveryLocation: t.orderId?.deliveryLocation ?? t.deliveryLocation,
+        pricing: t.orderId?.pricing ?? t.pricing,
+        createdAt: t.createdAt,
+        vehicleInfo: t.vehicleId,
+      }));
+      setHistory(normalized);
     } catch {}
     finally { setHistoryLoading(false); }
   }, []);
