@@ -81,7 +81,8 @@ export function DeliveryVerificationModal({ tripId, isVisible, onClose, onSucces
         await driverApi.uploadEvidence(tripId, formData);
       }
       await driverApi.verifyOtp(tripId, otpCode);
-      await driverApi.completeAssignment(tripId);
+      // Complete the trip via the milestone endpoint (matches web app)
+      await driverApi.updateMilestone(tripId, "COMPLETED", {});
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onSuccess();
     } catch (error: any) {

@@ -33,32 +33,34 @@ interface ActiveTripProps {
   assignment: Assignment | null;
   isLoading: boolean;
   onRefresh: () => void;
+  tripId?: string;
 }
 
-// Full milestone pipeline
+// Milestone pipeline — aligned with web app backend
 const TIMELINE_STEPS = [
-  { key: "ASSIGNED",            label: "Assigned",    icon: "📋", desc: "You have been assigned this load." },
-  { key: "STARTED",             label: "En Route",    icon: "🚀", desc: "Head to the pickup location." },
-  { key: "ARRIVED_AT_PICKUP",   label: "At Pickup",   icon: "📍", desc: "You have arrived — prepare to load cargo." },
-  { key: "PICKED_UP",           label: "Loaded",      icon: "📦", desc: "Cargo is loaded — begin transit to delivery." },
-  { key: "IN_TRANSIT",          label: "In Transit",  icon: "🚚", desc: "Head to the delivery destination." },
-  { key: "ARRIVED_AT_DELIVERY", label: "At Delivery", icon: "🏁", desc: "You have arrived at the delivery address." },
-  { key: "DELIVERED",           label: "Delivered",   icon: "✅", desc: "Complete with photo proof + receiver OTP." },
+  { key: "ASSIGNED",   label: "Assigned",   icon: "📋", desc: "Assignment confirmed. Tap to begin." },
+  { key: "STARTED",    label: "En Route",   icon: "🚀", desc: "Head to the pickup location." },
+  { key: "ARRIVED",    label: "At Pickup",  icon: "📍", desc: "You have arrived — prepare to load cargo." },
+  { key: "IN_TRANSIT", label: "In Transit", icon: "🚚", desc: "Head to the delivery destination." },
+  { key: "DELIVERED",  label: "At Delivery",icon: "🏁", desc: "You have arrived at the destination." },
+  { key: "COMPLETED",  label: "Completed",  icon: "✅", desc: "Complete with photo proof + receiver OTP." },
 ];
 
 // What the NEXT button says for each current status
 const NEXT_ACTION_LABEL: Record<string, string> = {
-  ASSIGNED:            "Start Trip →",
-  STARTED:             "Arrived at Pickup →",
-  ARRIVED_AT_PICKUP:   "Cargo Loaded →",
-  PICKED_UP:           "Begin Transit →",
-  IN_TRANSIT:          "Arrived at Delivery →",
-  ARRIVED_AT_DELIVERY: "Complete Delivery →",
+  ASSIGNED:   "Start Trip →",
+  STARTED:    "Arrived at Pickup →",
+  ARRIVED:    "Start Delivery →",
+  IN_TRANSIT: "Arrived at Delivery →",
+  DELIVERED:  "Complete Delivery →",
 };
 
 function getStepIndex(status: string): number {
   const n = status?.toUpperCase();
-  if (n === "ARRIVED") return 2; // legacy mapping
+  // Map legacy granular milestones to canonical web-app names
+  if (n === "ARRIVED_AT_PICKUP") return TIMELINE_STEPS.findIndex(s => s.key === "ARRIVED");
+  if (n === "PICKED_UP") return TIMELINE_STEPS.findIndex(s => s.key === "ARRIVED");
+  if (n === "ARRIVED_AT_DELIVERY") return TIMELINE_STEPS.findIndex(s => s.key === "DELIVERED");
   const idx = TIMELINE_STEPS.findIndex(s => s.key === n);
   return idx >= 0 ? idx : 0;
 }
@@ -75,7 +77,7 @@ function AnimatedCard({ children, delay = 0 }: { children: React.ReactNode; dela
   );
 }
 
-export function ActiveTrip({ assignment, isLoading, onRefresh }: ActiveTripProps) {
+export function ActiveTrip({ assignment, isLoading, onRefresh, tripId }: ActiveTripProps) {
   const colors = useColors();
   const [isVerificationModalVisible, setIsVerificationModalVisible] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -99,8 +101,9 @@ export function ActiveTrip({ assignment, isLoading, onRefresh }: ActiveTripProps
 
   // Stream GPS location + check geofences every 30s during active trip
   useEffect(() => {
-    const ACTIVE = ["STARTED", "ARRIVED_AT_PICKUP", "PICKED_UP", "IN_TRANSIT", "ARRIVED_AT_DELIVERY"];
+    const ACTIVE = ["STARTED", "ARRIVED", "IN_TRANSIT", "DELIVERED"];
     if (!assignment || !ACTIVE.includes(assignment.status?.toUpperCase())) return;
+    const tid = tripId ?? assignment._id;
 
     const stream = async () => {
       try {
@@ -108,12 +111,12 @@ export function ActiveTrip({ assignment, isLoading, onRefresh }: ActiveTripProps
         if (status !== "granted") return;
         const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         await driverApi.streamLocation(
-          assignment._id,
+          tid,
           loc.coords.longitude, loc.coords.latitude,
           loc.coords.speed ?? 0, loc.coords.heading ?? 0,
         );
         try {
-          const geoResult = await geofencesApi.checkLocation(loc.coords.latitude, loc.coords.longitude, assignment._id);
+          const geoResult = await geofencesApi.checkLocation(loc.coords.latitude, loc.coords.longitude, tid);
           setGeofenceWarning((geoResult?.data as any)?.isRestricted ? "You are entering a restricted zone." : null);
         } catch {}
       } catch {}
@@ -122,7 +125,7 @@ export function ActiveTrip({ assignment, isLoading, onRefresh }: ActiveTripProps
     stream();
     const interval = setInterval(stream, 30_000);
     return () => clearInterval(interval);
-  }, [assignment?._id, assignment?.status]);
+  }, [assignment?._id, assignment?.status, tripId]);
 
   const getLocation = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
@@ -153,31 +156,32 @@ export function ActiveTrip({ assignment, isLoading, onRefresh }: ActiveTripProps
       const nextStep = TIMELINE_STEPS[currentIdx + 1];
       if (!nextStep) return;
 
-      if (nextStep.key === "DELIVERED") {
+      // COMPLETED step opens the verification modal (photo + OTP)
+      if (nextStep.key === "COMPLETED") {
         setActionLoading(false);
         setIsVerificationModalVisible(true);
         return;
       }
 
-      switch (nextStep.key) {
-        case "STARTED":
-          await driverApi.startAssignment(assignment._id);
-          break;
-        case "ARRIVED_AT_PICKUP":
-          await driverApi.arriveAtPickup(assignment._id);
-          break;
-        default:
-          await driverApi.updateMilestone(assignment._id, nextStep.key, {
-            longitude: loc?.coords.longitude,
-            latitude: loc?.coords.latitude,
-            note: milestoneNote.trim() || undefined,
-          });
+      // The actual trip ID to use for milestone updates (not the order/assignment ID)
+      const tid = tripId ?? assignment._id;
+
+      if (nextStep.key === "STARTED") {
+        // Initial start uses the assignment/order endpoint
+        await driverApi.startAssignment(assignment._id);
+      } else {
+        // All subsequent milestones use the trip milestone endpoint
+        await driverApi.updateMilestone(tid, nextStep.key, {
+          longitude: loc?.coords.longitude,
+          latitude: loc?.coords.latitude,
+          note: milestoneNote.trim() || undefined,
+        });
       }
 
-      // Post location after milestone
-      if (loc) {
+      // Stream location after milestone transition
+      if (loc && tid) {
         await driverApi.streamLocation(
-          assignment._id,
+          tid,
           loc.coords.longitude, loc.coords.latitude,
           loc.coords.speed ?? 0, loc.coords.heading ?? 0,
         );
@@ -222,9 +226,9 @@ export function ActiveTrip({ assignment, isLoading, onRefresh }: ActiveTripProps
   const currentStep = TIMELINE_STEPS[currentIdx];
   const nextStep = TIMELINE_STEPS[currentIdx + 1];
   const status = assignment.status?.toUpperCase();
-  const isDelivered = status === "DELIVERED" || status === "COMPLETED";
+  const isDelivered = status === "COMPLETED";
 
-  // Navigate to pickup if not yet picked up, otherwise delivery
+  // Navigate to pickup until IN_TRANSIT (index 3), then navigate to delivery
   const navTarget = currentIdx < 3 ? assignment.pickupLocation : assignment.deliveryLocation;
 
   return (
@@ -519,7 +523,7 @@ export function ActiveTrip({ assignment, isLoading, onRefresh }: ActiveTripProps
       </ScrollView>
 
       <DeliveryVerificationModal
-        tripId={assignment._id}
+        tripId={tripId ?? assignment._id}
         isVisible={isVerificationModalVisible}
         onClose={() => setIsVerificationModalVisible(false)}
         onSuccess={() => { setIsVerificationModalVisible(false); onRefresh(); }}

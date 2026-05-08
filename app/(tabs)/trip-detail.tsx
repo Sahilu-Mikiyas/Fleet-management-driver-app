@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { ScrollView, Text, View, Pressable, ActivityIndicator, Animated } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
-import { tripsApi } from "@/lib/api-client";
+import { tripsApi, driverApi } from "@/lib/api-client";
 import { useColors } from "@/hooks/use-colors";
 import * as Linking from "expo-linking";
 
@@ -47,12 +47,31 @@ export default function TripDetailScreen() {
   const fetchTrip = useCallback(async () => {
     if (!tripId) { setError("No trip ID provided."); setIsLoading(false); return; }
     try {
+      // Try the generic trips endpoint first
       const res = await tripsApi.getTrip(tripId);
       const d = res.data?.data ?? res.data;
-      setTrip(d?.trip ?? d?.order ?? d);
-      Animated.spring(headerAnim, { toValue: 1, useNativeDriver: true, tension: 100, friction: 20 }).start();
-    } catch (e: any) {
-      setError(e.message || "Could not load trip details.");
+      const t = d?.trip ?? d?.order ?? d;
+      if (t?._id) {
+        setTrip(t);
+        Animated.spring(headerAnim, { toValue: 1, useNativeDriver: true, tension: 100, friction: 20 }).start();
+        return;
+      }
+      throw new Error("empty");
+    } catch {
+      // Fallback: find the trip in the driver's own trips list
+      try {
+        const res = await driverApi.getDriverTrips();
+        const raw: any[] = res.data?.data?.trips ?? res.data?.data ?? [];
+        const found = raw.find((t: any) => t._id === tripId);
+        if (found) {
+          setTrip(found);
+          Animated.spring(headerAnim, { toValue: 1, useNativeDriver: true, tension: 100, friction: 20 }).start();
+        } else {
+          setError("Trip not found.");
+        }
+      } catch (e: any) {
+        setError(e.message || "Could not load trip details.");
+      }
     } finally {
       setIsLoading(false);
     }

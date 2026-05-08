@@ -34,6 +34,7 @@ export function OrdersHub() {
   // Data States
   const [assignments, setAssignments] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
+  const [rawTrips, setRawTrips] = useState<any[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
 
   // Fast poll: assignments every 5s (tracks active trip changes in near-real-time)
@@ -53,6 +54,7 @@ export function OrdersHub() {
       const data = res.data;
       // GET /trips/driver/mine returns trip objects with nested orderId
       const raw: any[] = data.data?.trips || data.data || [];
+      setRawTrips(raw);
       const normalized = raw.map((t: any) => ({
         _id: t._id,
         title: t.orderId?.title,
@@ -144,8 +146,16 @@ export function OrdersHub() {
   // Derived state
   const pendingOrders = assignments.filter((a) => a.status?.toUpperCase() === "ASSIGNED");
   const activeOrder = assignments.find((a) =>
-    ["STARTED", "ARRIVED", "ARRIVED_AT_PICKUP", "PICKED_UP", "IN_TRANSIT", "ARRIVED_AT_DELIVERY"].includes(a.status?.toUpperCase())
+    ["STARTED", "ARRIVED", "IN_TRANSIT", "DELIVERED", "ARRIVED_AT_PICKUP", "PICKED_UP", "ARRIVED_AT_DELIVERY"].includes(a.status?.toUpperCase())
   ) || null;
+
+  // Find the real trip ID by matching the active order (order ID) against rawTrips (which have orderId)
+  const activeTripId: string | undefined = activeOrder
+    ? rawTrips.find((t: any) => {
+        const oid = typeof t.orderId === "string" ? t.orderId : t.orderId?._id;
+        return oid === activeOrder._id;
+      })?._id
+    : undefined;
 
   const UMBRELLA_COMPANY_ID = process.env.EXPO_PUBLIC_UMBRELLA_COMPANY_ID;
   const isTransporter = !!UMBRELLA_COMPANY_ID && driver?.companyId === UMBRELLA_COMPANY_ID;
@@ -194,7 +204,7 @@ export function OrdersHub() {
       {/* Content Area */}
       <View className="flex-1 bg-surface">
         {activeTab === "active" && (
-          <ActiveTrip assignment={activeOrder} isLoading={isLoading} onRefresh={fetchData} />
+          <ActiveTrip assignment={activeOrder} isLoading={isLoading} onRefresh={fetchData} tripId={activeTripId} />
         )}
         {activeTab === "pending" && (
           <PendingAssignments assignments={pendingOrders} isLoading={isLoading} onRefresh={fetchData} />
